@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Household Reset Tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #fbf6ef; color: #2f2f33; margin: 0; padding: 16px; }
+    h1 { font-size: 1.4rem; }
+    #summary { font-size: 1.2rem; font-weight: 700; padding: 12px 16px; border-radius: 12px; }
+    #summary.pass { background: #dcefdc; }
+    #summary.fail { background: #f6d2d2; }
+    li { padding: 6px 0; }
+    .pass::marker { content: "✅ "; }
+    .fail::marker { content: "❌ "; }
+  </style>
+</head>
+<body>
+  <h1>Household Reset — self-tests</h1>
+  <p>This page checks the rules in <code>logic.js</code>. It does not touch your saved data.</p>
+  <p id="summary">Running…</p>
+  <ul id="results"></ul>
+
+  <script src="logic.js"></script>
+  <script>
+    var L = window.HouseholdLogic;
+    var results = [];
+
+    function test(name, fn) {
+      try {
+        fn();
+        results.push({ name: name, ok: true });
+      } catch (err) {
+        results.push({ name: name, ok: false, message: err.message });
+      }
+    }
+
+    function expectEqual(actual, expected) {
+      var a = JSON.stringify(actual);
+      var e = JSON.stringify(expected);
+      if (a !== e) throw new Error('expected ' + e + ' but got ' + a);
+    }
+
+    // Saturday 24 Oct 2026 and the Monday after it.
+    var saturday = new Date(2026, 9, 24, 10, 0);
+    var nextMonday = new Date(2026, 9, 26, 9, 0);
+
+    test('weeks are labelled with ISO week numbers', function () {
+      expectEqual(L.weekKey(saturday), '2026-W43');
+      expectEqual(L.weekKey(nextMonday), '2026-W44');
+    });
+
+    test('Sunday belongs to the same week as the Monday before it', function () {
+      expectEqual(L.weekKey(new Date(2026, 9, 25)), '2026-W43');
+    });
+
+    test('week numbers work across New Year', function () {
+      expectEqual(L.weekKey(new Date(2026, 0, 1)), '2026-W01');
+      expectEqual(L.weekKey(new Date(2027, 0, 1)), '2026-W53');
+    });
+
+    test('weekStartDay finds the Monday', function () {
+      expectEqual(L.weekStartDay(saturday), '2026-10-19');
+    });
+
+    test('default state has all 11 starter chores, supplies, and cat tasks', function () {
+      var s = L.createDefaultState();
+      expectEqual(s.chores.length, 11);
+      expectEqual(s.chores[0].name, 'Vacuum floors');
+      expectEqual(s.supplies.length > 0, true);
+      expectEqual(s.pets.length > 0, true);
+    });
+
+    test('toggling a chore marks it done, toggling again undoes it', function () {
+      var chore = L.createChore('Dust', true);
+      var week = L.weekKey(saturday);
+      L.toggleChore(chore, week);
+      expectEqual(L.isChoreDone(chore, week), true);
+      L.toggleChore(chore, week);
+      expectEqual(L.isChoreDone(chore, week), false);
+    });
+
+    test('progress counts done chores and rounds the percent', function () {
+      var week = L.weekKey(saturday);
+      var chores = [L.createChore('A'), L.createChore('B'), L.createChore('C')];
+      L.toggleChore(chores[0], week);
+      expectEqual(L.weeklyProgress(chores, week), { done: 1, total: 3, percent: 33 });
+    });
+
+    test('progress with no chores is 0%, not an error', function () {
+      expectEqual(L.weeklyProgress([], '2026-W43'), { done: 0, total: 0, percent: 0 });
+    });
+
+    test('recurring chores reset in a new week, but last week is kept in history', function () {
+      var s = L.createDefaultState();
+      var week = L.weekKey(saturday);
+      L.toggleChore(s.chores[0], week);
+      L.toggleChore(s.chores[1], week);
+      L.recordWeek(s, saturday);
+
+      L.rollover(s, nextMonday);
+
+      expectEqual(s.chores.length, 11);
+      expectEqual(L.weeklyProgress(s.chores, L.weekKey(nextMonday)).done, 0);
+      expectEqual(s.history['2026-W43'].done, 2);
+      expectEqual(s.history['2026-W43'].completed, ['Vacuum floors', 'Mop floors']);
+    });
+
+    test('one-time chores disappear the week after they are finished', function () {
+      var s = L.createDefaultState();
+      s.chores.push(L.createChore('Clean the oven', false));
+      s.chores.push(L.createChore('Fix the shelf', false));
+      L.toggleChore(s.chores[11], L.weekKey(saturday));
+      L.recordWeek(s, saturday);
+
+      L.rollover(s, nextMonday);
+
+      var names = s.chores.map(function (c) { return c.name; });
+      expectEqual(names.indexOf('Clean the oven'), -1);
+      expectEqual(names.indexOf('Fix the shelf') > -1, true);
+      expectEqual(s.history['2026-W43'].completed, ['Clean the oven']);
+    });
+
+    test('changes this week do not change earlier weeks', function () {
+      var s = L.createDefaultState();
+      L.toggleChore(s.chores[0], L.weekKey(saturday));
+      L.recordWeek(s, saturday);
+      L.rollover(s, nextMonday);
+      s.chores.splice(0, 1); // delete a chore in the new week
+      L.recordWeek(s, nextMonday);
+      expectEqual(s.history['2026-W43'].done, 1);
+      expectEqual(s.history['2026-W43'].total, 11);
+    });
+
+    test('pastWeeks lists older weeks newest first, not the current week', function () {
+      var s = L.createDefaultState();
+      L.recordWeek(s, new Date(2026, 9, 10));
+      L.recordWeek(s, saturday);
+      L.recordWeek(s, nextMonday);
+      var weeks = L.pastWeeks(s, nextMonday).map(function (w) { return w.week; });
+      expectEqual(weeks, ['2026-W43', '2026-W41']);
+    });
+
+    test('cat tasks reset each day', function () {
+      var task = L.createPetTask('Feed Cat 1 breakfast');
+      L.togglePetTask(task, L.dayKey(saturday));
+      expectEqual(L.isPetTaskDone(task, L.dayKey(saturday)), true);
+      expectEqual(L.isPetTaskDone(task, L.dayKey(nextMonday)), false);
+    });
+
+    test('supplies toggle on and off', function () {
+      var item = L.createSupply('Sponges');
+      L.toggleSupply(item);
+      expectEqual(item.done, true);
+      L.toggleSupply(item);
+      expectEqual(item.done, false);
+    });
+
+    test('broken or missing saved data starts fresh instead of crashing', function () {
+      expectEqual(L.parseState(null).chores.length, 11);
+      expectEqual(L.parseState('not json {').chores.length, 11);
+      expectEqual(L.parseState('{"chores": 5}').chores.length, 11);
+    });
+
+    test('valid saved data is loaded back', function () {
+      var s = L.createDefaultState();
+      s.chores = [L.createChore('Only chore')];
+      expectEqual(L.parseState(JSON.stringify(s)).chores[0].name, 'Only chore');
+    });
+
+    test('cleanName trims spaces and rejects blanks', function () {
+      expectEqual(L.cleanName('   Wash   windows  '), 'Wash windows');
+      expectEqual(L.cleanName('    '), '');
+    });
+
+    // Show the results on the page.
+    var list = document.getElementById('results');
+    results.forEach(function (r) {
+      var li = document.createElement('li');
+      li.className = r.ok ? 'pass' : 'fail';
+      li.textContent = r.name + (r.ok ? '' : ' — ' + r.message);
+      list.appendChild(li);
+    });
+    var failed = results.filter(function (r) { return !r.ok; }).length;
+    var summary = document.getElementById('summary');
+    summary.className = failed ? 'fail' : 'pass';
+    summary.textContent = failed
+      ? failed + ' of ' + results.length + ' tests failed'
+      : 'All ' + results.length + ' tests passed';
+  </script>
+</body>
+</html>
