@@ -1,0 +1,405 @@
+/*
+ * styles.css — how Household Reset looks.
+ * Colours live in one place (:root) so they're easy to change later.
+ */
+:root {
+  --cream: #fbf6ef;
+  --cream-deep: #f3eadf;
+  --card: #fffdf9;
+  --blush: #f4d9d9;
+  --blush-strong: #e8b4b8;
+  --blush-deep: #b85f6e; /* darker pink for text on cream, readable */
+  --charcoal: #2f2f33;
+  --charcoal-soft: #5c5a5e;
+  --line: #eadccf;
+  --danger: #a8404f;
+  --radius: 18px;
+  --tap: 52px; /* minimum size of anything you tap */
+  --shadow: 0 2px 10px rgba(47, 47, 51, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent; /* no grey/blue flash when tapping */
+}
+
+button,
+summary,
+.toggle {
+  -webkit-user-select: none;
+  user-select: none; /* tapping shouldn't highlight button text */
+}
+
+body {
+  margin: 0;
+  background: var(--cream);
+  color: var(--charcoal);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1.5;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+h1, h2 {
+  margin: 0;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 1.9rem;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: 1.25rem;
+}
+
+.app-header,
+.tabs,
+main,
+.app-footer {
+  max-width: 720px;
+  margin: 0 auto;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.app-header {
+  padding-top: max(24px, env(safe-area-inset-top));
+  padding-bottom: 8px;
+}
+
+.tagline {
+  margin: 4px 0 0;
+  color: var(--charcoal-soft);
+}
+
+/* ---------- Tabs ---------- */
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: var(--cream);
+}
+
+.tab {
+  min-height: var(--tap);
+  border: none;
+  border-radius: 999px;
+  background: var(--cream-deep);
+  color: var(--charcoal);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab[aria-selected="true"] {
+  background: var(--blush-strong);
+}
+
+/* ---------- Cards & progress ---------- */
+.panel {
+  padding-top: 8px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
+  margin-bottom: 14px;
+}
+
+.hint {
+  margin: 8px 0 0;
+  font-size: 0.95rem;
+  color: var(--charcoal-soft);
+}
+
+.progress-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+#progress-count {
+  font-weight: 600;
+  color: var(--blush-deep);
+}
+
+.progress-track {
+  height: 18px;
+  background: var(--cream-deep);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--blush-strong), var(--blush-deep));
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+/* ---------- Add form ---------- */
+.add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.add-form input[type="text"] {
+  flex: 1 1 220px;
+}
+
+input[type="text"] {
+  min-height: var(--tap);
+  padding: 0 16px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--charcoal);
+  font: inherit; /* 18px stops iPhone from zooming in on focus */
+}
+
+input[type="text"]:focus {
+  outline: none;
+  border-color: var(--blush-deep);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 0 4px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--blush-deep);
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 20px;
+  border: none;
+  border-radius: 14px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--charcoal);
+  color: var(--cream);
+}
+
+.btn-quiet {
+  background: var(--cream-deep);
+  color: var(--charcoal);
+}
+
+.btn-small {
+  padding: 0 14px;
+  font-size: 0.95rem;
+  background: transparent;
+  color: var(--charcoal-soft);
+}
+
+.btn-danger {
+  color: var(--danger);
+}
+
+.btn:active,
+.tab:active,
+.check:active {
+  transform: scale(0.97);
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+}
+
+/* ---------- Checklist items ---------- */
+.item-list,
+.history-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 68px;
+  padding: 8px 8px 8px 12px;
+  margin-bottom: 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.item.done {
+  background: var(--blush);
+  border-color: var(--blush-strong);
+}
+
+.check {
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+  border: 3px solid var(--blush-strong);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--charcoal);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.item.done .check {
+  background: var(--blush-deep);
+  border-color: var(--blush-deep);
+  color: #fff;
+}
+
+.item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-name {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.item.done .item-name {
+  text-decoration: line-through;
+  color: var(--charcoal-soft);
+}
+
+.badge {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: var(--cream-deep);
+  font-size: 0.8rem;
+  color: var(--charcoal-soft);
+}
+
+.item-actions {
+  display: flex;
+  flex: none;
+}
+
+/* Editing a row */
+.edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.edit-form input[type="text"] {
+  flex: 1 1 200px;
+}
+
+.empty {
+  padding: 18px;
+  text-align: center;
+  color: var(--charcoal-soft);
+}
+
+/* ---------- History ---------- */
+.history-item {
+  margin-bottom: 10px;
+}
+
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+}
+
+.history-item .progress-track {
+  height: 10px;
+  margin-top: 10px;
+}
+
+.history-item details {
+  margin-top: 8px;
+  font-size: 0.95rem;
+  color: var(--charcoal-soft);
+}
+
+.history-item summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* ---------- Footer ---------- */
+.app-footer {
+  padding-top: 8px;
+  padding-bottom: 32px;
+  font-size: 0.9rem;
+  color: var(--charcoal-soft);
+}
+
+.app-footer p {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--cream-deep);
+}
+
+/* Hidden from eyes but still read by screen readers */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* On very small phones, tighten the row buttons so names have room */
+@media (max-width: 380px) {
+  .btn-small {
+    padding: 0 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill {
+    transition: none;
+  }
+}
