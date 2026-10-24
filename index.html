@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fbf6ef">
+  <meta name="description" content="Household Reset: a cozy weekly chore, supplies, and cat-care checklist.">
+  <title>Household Reset</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏡</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Household Reset</h1>
+    <p class="tagline" id="week-label">Your cozy weekly reset</p>
+  </header>
+
+  <nav class="tabs" aria-label="Sections">
+    <button class="tab" type="button" data-tab="chores" aria-selected="true">Chores</button>
+    <button class="tab" type="button" data-tab="supplies" aria-selected="false">Supplies</button>
+    <button class="tab" type="button" data-tab="pets" aria-selected="false">Cats</button>
+    <button class="tab" type="button" data-tab="history" aria-selected="false">History</button>
+  </nav>
+
+  <main>
+    <!-- Weekly chores -->
+    <section class="panel" id="panel-chores" data-panel="chores">
+      <div class="card progress-card">
+        <div class="progress-text">
+          <h2>This week</h2>
+          <span id="progress-count">0 of 0 done</span>
+        </div>
+        <div class="progress-track" role="progressbar" aria-label="Weekly chores completed"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <p class="hint">Weekly chores uncheck themselves every Monday. Past weeks are saved in History.</p>
+      </div>
+
+      <form class="add-form" data-list="chores">
+        <label class="visually-hidden" for="add-chore">New chore</label>
+        <input id="add-chore" name="name" type="text" placeholder="Add a chore…" autocomplete="off" maxlength="80">
+        <label class="toggle">
+          <input type="checkbox" name="recurring" checked>
+          Repeats weekly
+        </label>
+        <button type="submit" class="btn btn-primary">Add</button>
+      </form>
+
+      <ul class="item-list" id="list-chores"></ul>
+    </section>
+
+    <!-- Household supplies -->
+    <section class="panel" id="panel-supplies" data-panel="supplies" hidden>
+      <div class="card">
+        <h2>Household supplies</h2>
+        <p class="hint">Tick items when they're stocked up. Untick when you're running low.</p>
+      </div>
+
+      <form class="add-form" data-list="supplies">
+        <label class="visually-hidden" for="add-supply">New supply</label>
+        <input id="add-supply" name="name" type="text" placeholder="Add a supply…" autocomplete="off" maxlength="80">
+        <button type="submit" class="btn btn-primary">Add</button>
+      </form>
+
+      <ul class="item-list" id="list-supplies"></ul>
+      <button type="button" class="btn btn-quiet" id="uncheck-supplies">Untick all supplies</button>
+    </section>
+
+    <!-- Cat care -->
+    <section class="panel" id="panel-pets" data-panel="pets" hidden>
+      <div class="card">
+        <h2>Cat care 🐈 🐈</h2>
+        <p class="hint">A daily checklist for two cats. It unchecks itself each morning.</p>
+      </div>
+
+      <form class="add-form" data-list="pets">
+        <label class="visually-hidden" for="add-pet">New cat task</label>
+        <input id="add-pet" name="name" type="text" placeholder="Add a cat task…" autocomplete="off" maxlength="80">
+        <button type="submit" class="btn btn-primary">Add</button>
+      </form>
+
+      <ul class="item-list" id="list-pets"></ul>
+    </section>
+
+    <!-- Past weeks -->
+    <section class="panel" id="panel-history" data-panel="history" hidden>
+      <div class="card">
+        <h2>Past weeks</h2>
+        <p class="hint">A record of how each earlier week went.</p>
+      </div>
+      <ul class="history-list" id="list-history"></ul>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>
+      <strong>Where is my data?</strong> Everything is saved only in this browser on this device
+      (using <em>localStorage</em>). It does not sync between your iPad and phone, and clearing
+      your browser's website data will erase it.
+    </p>
+  </footer>
+
+  <script src="logic.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
