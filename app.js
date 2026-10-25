@@ -311,8 +311,104 @@
     });
   }
 
+  // ---------- Backup & Restore ----------
+
+  var pendingRestore = null; // a checked backup waiting for "Replace my data"
+
+  function setBackupStatus(message, kind) {
+    var status = document.getElementById('backup-status');
+    status.textContent = message;
+    status.className = 'backup-status' + (kind ? ' ' + kind : '');
+  }
+
+  // Turns all saved data into a .json file and asks the browser to download it.
+  function downloadBackup() {
+    var now = new Date();
+    var text = JSON.stringify(L.createBackup(state, now), null, 2);
+    var blob = new Blob([text], { type: 'application/json' });
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = L.backupFileName(now);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(link.href); }, 10000);
+    setBackupStatus('Backup created: ' + link.download +
+      '. On iPad, you can find it in the Files app under Downloads.', 'success');
+  }
+
+  function hideRestoreConfirm() {
+    pendingRestore = null;
+    document.getElementById('restore-confirm').hidden = true;
+  }
+
+  // count(1, 'week', 'weeks') -> "1 week"; count(3, 'week', 'weeks') -> "3 weeks"
+  function count(n, one, many) {
+    return n + ' ' + (n === 1 ? one : many);
+  }
+
+  function formatBackupDate(isoText) {
+    var date = new Date(isoText);
+    if (!isoText || isNaN(date.getTime())) return 'an unknown date';
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  // Step 1 of restoring: read the chosen file and check it. Nothing is saved yet.
+  function onBackupFileChosen(event) {
+    var input = event.target;
+    var file = input.files && input.files[0];
+    input.value = ''; // so choosing the same file again still works
+    hideRestoreConfirm();
+    if (!file) return;
+
+    var reader = new FileReader();
+    reader.onload = function () {
+      var result = L.validateBackup(String(reader.result));
+      if (!result.ok) {
+        setBackupStatus(result.error + ' Nothing was changed.', 'error');
+        return;
+      }
+      var s = result.summary;
+      pendingRestore = result.state;
+      document.getElementById('restore-summary').textContent =
+        'This backup is from ' + formatBackupDate(s.exportedAt) + ' and has ' +
+        count(s.chores, 'chore', 'chores') + ', ' + count(s.supplies, 'supply', 'supplies') + ', ' +
+        count(s.pets, 'cat-care task', 'cat-care tasks') + ', and ' +
+        count(s.weeks, 'week', 'weeks') + ' of history.';
+      setBackupStatus('');
+      document.getElementById('restore-confirm').hidden = false;
+      document.getElementById('confirm-restore').focus();
+    };
+    reader.onerror = function () {
+      setBackupStatus("That file couldn't be opened. Nothing was changed.", 'error');
+    };
+    reader.readAsText(file);
+  }
+
+  // Step 2 of restoring: only runs after tapping "Replace my data".
+  function confirmRestore() {
+    if (!pendingRestore) return;
+    state = pendingRestore;
+    editing = null;
+    hideRestoreConfirm();
+    // Apply this week's and today's resets to the restored lists.
+    currentWeek = L.weekKey(new Date());
+    L.rollover(state, new Date());
+    save();
+    render();
+    setBackupStatus('Your data was restored from the backup.', 'success');
+  }
+
   function start() {
     load();
+
+    document.getElementById('download-backup').addEventListener('click', downloadBackup);
+    document.getElementById('restore-file').addEventListener('change', onBackupFileChosen);
+    document.getElementById('confirm-restore').addEventListener('click', confirmRestore);
+    document.getElementById('cancel-restore').addEventListener('click', function () {
+      hideRestoreConfirm();
+      setBackupStatus('Restore cancelled. Nothing was changed.');
+    });
 
     Object.keys(LISTS).forEach(function (listName) {
       var ul = document.getElementById('list-' + listName);
