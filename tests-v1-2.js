@@ -1706,23 +1706,17 @@
     expectEqual(state.reviews['2026-10-24'].updatedOn, '2026-11-02');
   });
 
-  test('add needed supply: suggested or typed, once, or marked as needed if it exists', function () {
+  test('the review never adds supplies on confirm; it counts ones added while open', function () {
     var state = reviewState();
-    state.supplies.push({ id: 'z1', name: 'Glass Cleaner', done: true });
     var count = state.supplies.length;
-    var counts = R.applyReview(state, draftWith(state, '2026-10-24', '2026-10-30', {
-      'bathroom-change-bathroom-trash|2026-10-24': { supply: 'Small trash bags' },
-      'bedroom-change-bedroom-trash|2026-10-24': { supply: 'small  TRASH bags' },
-      'bathroom-clean-mirror|2026-10-24': { supply: 'glass cleaner' },
-      'bathroom-wash-floor-mats|2026-10-24': { decision: 'done', supply: 'Detergent' } // Done: ignored
-    }), '2026-10-30');
+    var draft = R.createDraft(state, '2026-10-24', '2026-10-30');
+    expectEqual(draft.supplyChanges, 0);
+    draft.items['bathroom-change-bathroom-trash|2026-10-24'].supply = 'Small trash bags'; // stray text is ignored
+    draft.supplyChanges = 2; // the app counts each Add to Supplies tap while the review is open
+    var counts = R.applyReview(state, draft, '2026-10-30');
     expectEqual(counts.supplies, 2);
-    expectEqual(state.supplies.length, count + 1);
-    expectEqual(P.findSupply(state, 'Small trash bags').done, false);
-    expectEqual(P.findSupply(state, 'Glass cleaner').done, false);
-    expectEqual(P.findSupply(state, 'Detergent'), null);
-    expectEqual(R.supplyAction(state, 'GLASS cleaner'), 'mark');
-    expectEqual(R.supplyAction(state, 'Sponges for oven'), 'add');
+    expectEqual(state.supplies.length, count);
+    expectEqual(P.findSupply(state, 'Small trash bags'), null);
   });
 
   test('the summary preview changes nothing', function () {
@@ -1730,9 +1724,9 @@
     var before = canon(state);
     var counts = R.previewReview(state, draftWith(state, '2026-10-24', '2026-10-30', {
       'bathroom-clean-mirror|2026-10-24': { decision: 'done' },
-      'bathroom-change-bathroom-trash|2026-10-24': { note: 'x', supply: 'Small trash bags' }
+      'bathroom-change-bathroom-trash|2026-10-24': { note: 'x' }
     }), '2026-10-30');
-    expectSame(counts, { done: 1, carried: 23, notes: 1, supplies: 1 });
+    expectSame(counts, { done: 1, carried: 23, notes: 1, supplies: 0 });
     expectEqual(canon(state), before);
   });
 
@@ -1819,5 +1813,140 @@
     expectEqual(P.prompts(freshState(), ACTIVATED).length, 0); // next week is Oct 31–Nov 6
     expectEqual(P.nextWeek('2026-11-02'), '2026-11-07');
     expectTrue(P.prompts(freshState(), '2026-11-02').length > 0, 'Nov 7–13 has supply-linked chores');
+  });
+
+  // ======================================================================
+  section('Week review corrections');
+
+  function reviewedState() {
+    var state = reviewState(); // toilet ticked in the checklist
+    S.setNote(state, 'bathroom-change-bathroom-trash', '2026-10-24', 'No bags');
+    state.supplies.push({ id: 'k1', name: 'Small trash bags', done: false });
+    R.applyReview(state, draftWith(state, '2026-10-24', '2026-10-30', { 'bathroom-clean-mirror|2026-10-24': { decision: 'done' } }), '2026-10-30');
+    return state;
+  }
+
+  test('undo week review removes only the review', function () {
+    var state = reviewedState();
+    var records = canon(state.records);
+    var supplies = canon(state.supplies);
+    var overdue = canon(S.overdueOccurrences(state, null, '2026-11-02').map(function (o) { return o.task.id + '|' + o.week; }));
+    expectEqual(R.undoReview(state, '2026-10-24'), true);
+    expectEqual(state.reviews['2026-10-24'], undefined);
+    expectEqual(canon(state.records), records); // completions, dates, notes untouched
+    expectEqual(canon(state.supplies), supplies);
+    expectEqual(canon(S.overdueOccurrences(state, null, '2026-11-02').map(function (o) { return o.task.id + '|' + o.week; })), overdue);
+    expectEqual(R.canReview(state, '2026-10-24', '2026-10-30'), true); // available again
+    expectEqual(R.undoReview(state, '2026-10-24'), false); // nothing left to undo
+  });
+
+  test('a chore completed through the review stays completed after undo', function () {
+    var state = reviewedState();
+    R.undoReview(state, '2026-10-24');
+    expectEqual(S.getRecord(state, MIRROR, '2026-10-24').status, 'done');
+    expectEqual(S.getRecord(state, MIRROR, '2026-10-24').completedOn, '2026-10-30');
+    expectEqual(S.getRecord(state, 'bathroom-clean-toilet', '2026-10-24').completedOn, '2026-10-26');
+  });
+
+  test('reviewing again after undo starts fresh and creates no duplicate records', function () {
+    var state = reviewedState();
+    R.undoReview(state, '2026-10-24');
+    var recordCount = Object.keys(state.records).length;
+    var data = R.reviewData(state, '2026-10-24', '2026-11-01');
+    expectEqual(data.reviewedDone.length, 0);
+    expectEqual(data.unfinished, 23);
+    R.applyReview(state, R.createDraft(state, '2026-10-24', '2026-11-01'), '2026-11-01');
+    expectEqual(Object.keys(state.records).length, recordCount);
+    expectEqual(state.reviews['2026-10-24'].reviewedOn, '2026-11-01');
+  });
+
+  test('counts always agree: scheduled = completed + unfinished', function () {
+    var state = reviewedState();
+    [['2026-10-24', '2026-10-30'], ['2026-10-24', '2026-11-05'], ['2026-10-31', '2026-11-05']].forEach(function (c) {
+      var d = R.reviewData(state, c[0], c[1]);
+      expectEqual(d.scheduled, d.completed + d.unfinished);
+      expectEqual(d.unfinished, d.unfinishedItems.length);
+      expectTrue(d.unfinishedItems.every(function (o) { return o.status !== 'done'; }), 'no done chore counted as unfinished');
+    });
+  });
+
+  test('when everything was marked Done in the review, nothing is listed as unfinished', function () {
+    var state = freshState();
+    var draft = R.createDraft(state, '2026-10-24', '2026-10-30');
+    Object.keys(draft.items).forEach(function (k) { draft.items[k].decision = 'done'; });
+    R.applyReview(state, draft, '2026-10-30');
+    var data = R.reviewData(state, '2026-10-24', '2026-10-30');
+    expectSame([data.scheduled, data.completed, data.unfinished], [25, 25, 0]);
+    expectEqual(data.unfinishedItems.length, 0);
+    expectEqual(data.reviewedDone.length, 25); // kept as labelled, editable history
+  });
+
+  test('room selector counts add up and show finished rooms', function () {
+    var state = reviewedState();
+    var rooms = R.roomSummary(state, '2026-10-24', '2026-10-30');
+    var total = rooms.reduce(function (n, r) { return n + r.unfinished; }, 0);
+    expectEqual(total, R.reviewData(state, '2026-10-24', '2026-10-30').unfinished);
+    expectEqual(rooms.map(function (r) { return r.id; }), ['bathroom', 'kitchen', 'living-room', 'bedroom', 'cat-litter-room']);
+    var bathroom = rooms[0];
+    expectSame([bathroom.unfinished, bathroom.reviewedDone], [3, 1]);
+    var cats = rooms.filter(function (r) { return r.id === 'cat-litter-room'; })[0];
+    S.setDone(state, 'cat-litter-room-scoop-litter', '2026-10-24', '2026-10-30');
+    S.setDone(state, 'cat-litter-room-vacuum-floor', '2026-10-24', '2026-10-30');
+    expectEqual(cats.unfinished, 2);
+    expectEqual(R.roomSummary(state, '2026-10-24', '2026-10-30').filter(function (r) { return r.id === 'cat-litter-room'; })[0].unfinished, 0);
+  });
+
+  test('switching rooms keeps unsaved choices (the draft covers every room)', function () {
+    var state = reviewState();
+    var draft = R.createDraft(state, '2026-10-24', '2026-10-30');
+    draft.items['bathroom-clean-mirror|2026-10-24'].decision = 'done';
+    draft.items['kitchen-clean-kitchen-sink|2026-10-24'].note = 'Out of soap';
+    var counts = R.previewReview(state, draft, '2026-10-30');
+    expectSame(counts, { done: 1, carried: 23, notes: 1, supplies: 0 }); // summary includes all rooms
+  });
+
+  test('supply button wording: add, mark as needed, already needed, or blank', function () {
+    var state = freshState();
+    state.supplies.push({ id: 'a', name: 'Glass cleaner', done: true }, { id: 'b', name: 'Sponges', done: false });
+    expectEqual(R.supplyAction(state, 'Brand new thing'), 'add');
+    expectEqual(R.supplyAction(state, '  glass  CLEANER '), 'mark');
+    expectEqual(R.supplyAction(state, 'sponges'), 'already');
+    expectEqual(R.supplyAction(state, '   '), null);
+  });
+
+  test('Add to Supplies: custom names, no duplicates, already-needed items unchanged', function () {
+    var state = freshState();
+    state.supplies.push({ id: 'b', name: 'Sponges', done: false }, { id: 'a', name: 'Glass cleaner', done: true });
+    var n = state.supplies.length;
+    expectEqual(P.addOrMarkSupply(state, 'Grout brush').action, 'added');
+    expectEqual(P.addOrMarkSupply(state, 'grout BRUSH').action, 'already'); // just added (needed): no duplicate
+    expectEqual(P.addOrMarkSupply(state, 'Glass Cleaner').action, 'marked');
+    expectEqual(P.findSupply(state, 'Glass cleaner').done, false);
+    expectEqual(P.addOrMarkSupply(state, 'sponges').action, 'already');
+    expectEqual(P.addOrMarkSupply(state, '  '), null);
+    expectEqual(state.supplies.length, n + 1);
+  });
+
+  test('a supply added from a chore survives a reload and a backup', function () {
+    var state = freshState();
+    P.addOrMarkSupply(state, 'Small trash bags');
+    var storage = fakeStorage({});
+    H.saveState(storage, state);
+    var loaded = H.loadState(storage, '2026-10-26').state;
+    expectEqual(P.findSupply(loaded, 'small trash bags').done, false);
+    var restored = H.validateBackup(JSON.stringify(H.createBackup(loaded, new Date())), '2026-10-27').state;
+    expectEqual(restored.supplies.filter(function (s) { return s.name === 'Small trash bags'; }).length, 1);
+  });
+
+  test('undoing a review survives a reload and a backup', function () {
+    var state = reviewedState();
+    R.undoReview(state, '2026-10-24');
+    var storage = fakeStorage({});
+    H.saveState(storage, state);
+    var loaded = H.loadState(storage, '2026-10-31').state;
+    expectSame(loaded.reviews, {});
+    expectEqual(S.getRecord(loaded, MIRROR, '2026-10-24').status, 'done');
+    var restored = H.validateBackup(JSON.stringify(H.createBackup(loaded, new Date())), '2026-11-01').state;
+    expectSame(restored, loaded);
   });
 })();
