@@ -47,7 +47,14 @@
           <div class="progress-fill" id="progress-fill"></div>
         </div>
         <p class="hint" id="week-note">Cleaning weeks run Saturday to Friday.</p>
+        <div class="review-row" id="review-row">
+          <button type="button" class="btn btn-quiet" id="finish-week">Finish Cleaning Week</button>
+          <span class="chip chip-reviewed" id="review-status" hidden></span>
+        </div>
       </div>
+
+      <!-- Finish Cleaning Week (an optional review of one week) -->
+      <section class="card review-view" id="review-view" aria-labelledby="review-title" hidden></section>
 
       <!-- The list of rooms (the "home" of this tab) -->
       <div id="rooms-home">
@@ -185,6 +192,7 @@
   <script src="laundry.js"></script>
   <script src="storage.js"></script>
   <script src="prep.js"></script>
+  <script src="review.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
