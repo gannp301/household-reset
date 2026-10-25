@@ -37,6 +37,7 @@
       records: {},
       asNeeded: [],
       prep: {}, // "Get ready for next week" answers, one per chore occurrence
+      reviews: {}, // "Finish Cleaning Week" reviews, one per week
       laundry: W.createLaundry(),
       supplies: starter.supplies,
       pets: starter.pets,
@@ -127,7 +128,12 @@
     var damagedCopy = false;
     if (v2.text !== null) {
       var checked = validateState(parseJSON(v2.text));
-      if (checked.ok) return { state: checked.state, source: 'saved', canSave: true };
+      if (checked.ok) {
+        // Older 1.2 data: add default supply links that didn't exist yet
+        // (never over a chore's own supplies). The app saves the result.
+        var linked = S.addMissingDefaultSupplies(checked.state);
+        return { state: checked.state, source: 'saved', canSave: true, addedSupplyLinks: linked };
+      }
       // Damaged version 1.2 data: protect a copy before doing anything else.
       if (!keepDamagedCopy(storage, v2.text, today)) return unreadable(false);
       damagedCopy = true;
@@ -227,7 +233,36 @@
     if (t.supplies !== undefined) {
       var supplies = S.cleanSupplies(t.supplies);
       if (!Array.isArray(t.supplies) || supplies.length !== t.supplies.length) return null;
-      if (supplies.length) copy.supplies = supplies;
+      copy.supplies = supplies; // [] means you chose 'no supplies'
+    }
+    return copy;
+  }
+
+  // Optional "Finish Cleaning Week" reviews. Missing in older data = {}.
+  function checkReviews(reviews) {
+    if (reviews === undefined) return {};
+    if (!isPlainObject(reviews)) return null;
+    var copy = {};
+    var weeks = Object.keys(reviews);
+    for (var i = 0; i < weeks.length; i++) {
+      var r = reviews[weeks[i]];
+      if (!S.isSaturday(weeks[i]) || !isPlainObject(r) || !S.isDateText(r.reviewedOn) || !S.isDateText(r.updatedOn)) return null;
+      if (!isPlainObject(r.decisions) || !isPlainObject(r.counts)) return null;
+      var decisions = {};
+      var keys = Object.keys(r.decisions);
+      for (var j = 0; j < keys.length; j++) {
+        var parts = keys[j].split('|');
+        var d = r.decisions[keys[j]];
+        if (parts.length !== 2 || !isId(parts[0]) || !S.isSaturday(parts[1]) || (d !== 'carry' && d !== 'done')) return null;
+        decisions[keys[j]] = d;
+      }
+      var counts = {};
+      var ok = ['done', 'carried', 'notes', 'supplies'].every(function (k) {
+        counts[k] = r.counts[k];
+        return isCount(r.counts[k]);
+      });
+      if (!ok) return null;
+      copy[weeks[i]] = { reviewedOn: r.reviewedOn, updatedOn: r.updatedOn, decisions: decisions, counts: counts };
     }
     return copy;
   }
@@ -268,11 +303,15 @@
       if (r.status !== undefined && r.status !== 'done' && r.status !== 'skipped') return null;
       if (r.status === 'done' && !S.isDateText(r.completedOn)) return null;
       if (r.movedTo !== undefined && !S.isSaturday(r.movedTo)) return null;
-      if (!r.status && !r.movedTo) return null;
+      // Optional note on this occurrence (added in a later 1.2 update).
+      var note = typeof r.note === 'string' ? r.note.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+      if (r.note !== undefined && (typeof r.note !== 'string' || !note)) return null;
+      if (!r.status && !r.movedTo && !note) return null;
       var c = { taskId: r.taskId, week: r.week, room: r.room, name: S.cleanName(r.name) };
       if (r.status) c.status = r.status;
       if (r.status === 'done') c.completedOn = r.completedOn;
       if (r.movedTo) c.movedTo = r.movedTo;
+      if (note) c.note = note;
       copy[keys[i]] = c;
     }
     return copy;
@@ -349,6 +388,8 @@
     if (legacy === false) return fail('version 1.1 archive');
     var prep = checkPrep(data.prep);
     if (!prep) return fail('next-week prep answers');
+    var reviews = checkReviews(data.reviews);
+    if (!reviews) return fail('week reviews');
 
     return {
       ok: true,
@@ -360,6 +401,7 @@
         records: records,
         asNeeded: asNeeded,
         prep: prep,
+        reviews: reviews,
         laundry: laundry,
         supplies: lists.supplies,
         pets: lists.pets,
@@ -502,6 +544,7 @@
     if (file.backupVersion === BACKUP_VERSION) {
       var checked = validateState(file.data);
       if (!checked.ok) return { ok: false, error: checked.error.replace('this data', 'this backup') };
+      S.addMissingDefaultSupplies(checked.state); // same compatibility step as loading
       return { ok: true, state: checked.state, summary: summarize(checked.state, 'v2', file.exportedAt) };
     }
     if (typeof file.backupVersion === 'number' && file.backupVersion > BACKUP_VERSION) {
