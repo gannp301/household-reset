@@ -344,12 +344,15 @@
       // Optional note on this occurrence (added in a later 1.2 update).
       var note = typeof r.note === 'string' ? r.note.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
       if (r.note !== undefined && (typeof r.note !== 'string' || !note)) return null;
-      if (!r.status && !r.movedTo && !note) return null;
+      // Optional "Skip for now" flag (version 1.3). Only true is stored.
+      if (r.deferred !== undefined && r.deferred !== true) return null;
+      if (!r.status && !r.movedTo && !note && !r.deferred) return null;
       var c = { taskId: r.taskId, week: r.week, room: r.room, name: S.cleanName(r.name) };
-      if (r.status) c.status = r.status;
+      if (r.status) c.status = r.status; // 'skipped' from older versions is kept as-is
       if (r.status === 'done') c.completedOn = r.completedOn;
       if (r.movedTo) c.movedTo = r.movedTo;
       if (note) c.note = note;
+      if (r.deferred) c.deferred = true;
       copy[keys[i]] = c;
     }
     return copy;
