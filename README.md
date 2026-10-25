@@ -100,13 +100,32 @@ You can leave a short note on one occurrence of a chore, for example "I didn't h
 
 An optional look back at a week. Use the **Finish Cleaning Week** button on the week card. It's available for this week and earlier weeks, not future ones.
 
-1. It shows the Saturday–Friday dates and how many chores were **scheduled**, **completed**, and **unfinished**, with unfinished chores grouped by room.
-2. Each unfinished chore has exactly **two choices**:
-   - **Carry Over** (the default) leaves the chore open. It becomes overdue after the week ends, keeps its original due date, and the schedule doesn't change. You can add an optional note and an optional **Add needed supply** (with a suggestion if the chore has a supply link). If the supply already exists, it's marked as needed instead of being added again.
+1. It shows the Saturday–Friday dates and how many chores were **scheduled**, **completed**, and **unfinished**. Scheduled always equals completed plus unfinished.
+2. A **room selector** shows each room with its number of unfinished chores. Rooms with nothing left show a **✓**. It starts on the first room that still has something to do, and the heading says **Reviewing: Bathroom** (or whichever room). **All rooms** is there if you'd rather see everything at once. Switching rooms keeps your choices and notes.
+3. Each unfinished chore has exactly **two choices**:
+   - **Carry Over** (the default) leaves the chore open. It becomes overdue after the week ends, keeps its original due date, and the schedule doesn't change. You can add an optional note.
    - **Done** marks it complete with today's date.
-3. **Review summary** shows how many chores will be marked Done or carried over, and how many notes and supplies will change. Tap **Confirm**, or **Go Back** to change something.
+4. **Review summary** covers all rooms: how many chores will be marked Done or carried over, notes changed, and supplies changed. Tap **Confirm**, or **Go Back** to change something.
 
-Chores you already ticked stay completed. The review never clears the checklist, never locks the week, and never changes schedules. You can reopen it any time with **Edit week review**. Weeks move on by themselves whether or not you use it.
+**If everything is done**, the review just says **All done**. Chores you marked Done in an earlier save of the review are kept in a collapsed, labelled list (**Marked Done in this review**), so you can change your mind. Chores you ticked in the normal checklist are never listed; they simply stay completed.
+
+**Editing or undoing a review:**
+- **Edit week review** reopens it with your saved choices.
+- **Undo week review** (it asks first) removes only the "reviewed" status and date, so **Finish Cleaning Week** is available again. Your ticked chores, completion dates (including chores marked Done through the review), notes, supplies, and overdue chores all stay exactly as they are.
+
+The review never clears the checklist, never locks the week, and never changes schedules. Weeks move on by themselves whether or not you use it.
+
+## Add needed supply
+
+Open a chore's **More** panel in any room, or the **+ Add needed supply** section of a carried-over chore in Finish Cleaning Week.
+
+- **Suggested supplies** lists any supplies linked to that chore. Tapping one only fills in the name; nothing is chosen for you.
+- You can type any supply name.
+- Nothing is added until you tap the button:
+  - **Add to Supplies** for a new item, which is added unticked (needed).
+  - **Mark as needed** if the item is already on your list and ticked.
+  - **Already needed** (greyed out) if it's already on the list and unticked, so nothing is ever added twice. Capitals and extra spaces don't matter.
+- **Supply changes happen immediately**, the moment you tap the button. A green **✓ Added…** or **✓ Marked…** message confirms it, even during Finish Cleaning Week. They don't wait for the review's Confirm, and cancelling the review doesn't remove them. The review summary just counts them as "already saved".
 
 ## Get ready for next week
 
