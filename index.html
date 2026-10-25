@@ -104,16 +104,25 @@
     <section class="panel" id="panel-supplies" data-panel="supplies" hidden>
       <div class="card">
         <h2>Household supplies</h2>
-        <p class="hint">Tick items when they're stocked up. Untick when you're running low.</p>
+        <p class="hint">Ticked = stocked (you have it). Unticked = needed. Tap a category to open or close it.</p>
       </div>
 
-      <form class="add-form" data-list="supplies">
+      <form class="add-form supply-add-form" id="supply-add-form">
         <label class="visually-hidden" for="add-supply">New supply</label>
         <input id="add-supply" name="name" type="text" placeholder="Add a supply…" autocomplete="off" maxlength="80">
+        <label class="visually-hidden" for="add-supply-category">Category</label>
+        <select id="add-supply-category" name="category"></select>
         <button type="submit" class="btn btn-primary">Add</button>
       </form>
+      <div class="supply-tab-msg" id="supply-tab-msg" role="status"></div>
 
-      <ul class="item-list" id="list-supplies"></ul>
+      <div class="supply-categories" id="list-supplies"></div>
+
+      <form class="add-form new-category-form" id="new-category-form">
+        <label class="visually-hidden" for="new-category">New category name</label>
+        <input id="new-category" name="name" type="text" placeholder="New category…" autocomplete="off" maxlength="40">
+        <button type="submit" class="btn btn-quiet">Add category</button>
+      </form>
       <button type="button" class="btn btn-quiet" id="uncheck-supplies">Untick all supplies</button>
     </section>
 
@@ -194,6 +203,7 @@
   <script src="storage.js"></script>
   <script src="prep.js"></script>
   <script src="review.js"></script>
+  <script src="supplies.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
