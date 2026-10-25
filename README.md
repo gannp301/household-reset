@@ -8,7 +8,8 @@ A cozy, mobile-friendly home management app: a room-by-room cleaning calendar, a
 - **A Saturday–Friday cleaning calendar.** Move between weeks with ‹ and ›, and tap **Back to this week** to return.
 - **Chores repeat on a schedule:** weekly, every 2 weeks, monthly, quarterly, or as needed.
 - **Overdue chores are kept, not lost.** A missed chore stays on the list with its original due week until you do it or skip it.
-- **Reminders and Upcoming** show what's due now, what's due next week, and when the less-frequent chores come round.
+- **Heads up** sums up what needs attention in the week you're viewing, in up to three short rows.
+- **Get ready for next week** asks about supplies only for next week's chores that genuinely need them.
 - **A laundry tracker** for one washer and one dryer, with a separate **Put away laundry** list.
 - **Backups now include everything**, and version 1.1 backup files can still be restored.
 - **Your version 1.1 data is kept safe.** See [What happens when you first open version 1.2](#what-happens-when-you-first-open-version-12).
@@ -17,7 +18,7 @@ A cozy, mobile-friendly home management app: a room-by-room cleaning calendar, a
 
 | Tab | What it does |
 |-----|--------------|
-| **Rooms** | The cleaning calendar. Shows the week, totals (due, completed, overdue, coming up), reminders, a card for each room, and an Upcoming list. Tap a room card to open its checklist. |
+| **Rooms** | The cleaning calendar. Shows the week, totals (due, completed, overdue, next week), **Heads up**, a card for each room, and **Get ready for next week**. Tap a room card to open its checklist. |
 | **Supplies** | Household supplies checklist (unchanged). Tick items when stocked, and use **Untick all supplies** before a shopping trip. |
 | **Cats** | Daily care checklist for two cats (unchanged). It unchecks itself each morning. |
 | **History** | Each past cleaning week: what was done (and on what date), skipped, or missed, plus laundry loads finished. Below that is the **Version 1.1 archive** with your old weekly scores. |
@@ -63,8 +64,38 @@ Changing how often a chore repeats starts its new schedule from the current week
 - Doing a chore late **doesn't shift its schedule**. An every-2-weeks chore stays on its rotation.
 - Back from a trip? **Skip all overdue in this room** clears a room in one tap, after asking first. Skipped chores are recorded as skipped, not done.
 - **As-needed** chores are never overdue.
-- The **Reminders** card always shows the **current** week (based on today's date), even when you're viewing a different week with ‹ and ›. The card says so when that happens.
+- Overdue chores also appear at the top of **Heads up** (see below).
 - Reminders appear **inside the app only**. Household Reset can't send phone notifications.
+
+## Heads up
+
+The **Heads up** card sums up the week shown in the week navigator. Its label always says which week that is, and whether it's this week, a past week, or a future week. It changes when you tap ‹ or ›.
+
+It shows **at most three short rows**, most important first:
+
+| Row | When viewing this week | When viewing another week |
+|-----|------------------------|---------------------------|
+| ⚠ **Overdue** (amber) | Missed chores from earlier weeks | Past week: that week's chores still not done. Future week: not shown. |
+| ★ **Due** | Every-2-weeks, monthly, and quarterly chores due this week | The same, for the week shown |
+| ◷ **Coming up** | Monthly and quarterly chores due next week | Those due the week after the one shown |
+
+- Ordinary weekly chores aren't repeated here. They're already in each room. They only appear if they're overdue.
+- Tap a row (or press Enter on it) to **Show details**: each chore's name, room, and frequency.
+- A chore is only ever listed under the week it actually belongs to.
+- When nothing needs attention, it just says **All clear**.
+
+## Get ready for next week
+
+This card looks only at **next week** (the next Saturday to Friday) and only at chores that genuinely need a supply, for example **Change scent booster plugins** → **Scent plugin refills**. Everyday chores never ask questions.
+
+- Each supply is asked about once, even if several chores need it, for example "Do you have Glass cleaner?" for both mirrors.
+- **I'm stocked** saves your answer.
+- **Add to supplies** puts the item on your Supplies list as needed (unticked). If it's already on the list, the button says **Mark as needed** instead, so nothing is added twice.
+- Being on the Supplies list never counts as "in stock". The question is still asked, and it shows whether the item is ticked.
+- Answers are saved for that specific chore occurrence, so they don't come back after a refresh. The same chore's next occurrence asks again.
+- **Change answer** undoes it: the question comes back, items it added are removed (unless another answer still uses them), and items it marked get their old tick back.
+- Tap the heading to collapse or expand the card. It opens by itself when something needs checking.
+- To give any chore its own supplies, open its room → **All chores in this room** → **Edit**, and fill in **Supplies it needs** (separate items with commas).
 
 ## Laundry tracking
 
@@ -126,7 +157,7 @@ A message at the top of the Rooms tab tells you when the upgrade has happened. *
 3. The file is saved as something like `household-reset-backup-2026-10-25.json`. Find it in the **Files** app → **Downloads** (it may be under **On My iPad** or **iCloud Drive**).
 4. Optional: move it somewhere safe, such as a folder in iCloud Drive or an email to yourself.
 
-A version 1.2 backup contains your rooms' chores and schedules, every completion, skip, and move (with dates), as-needed history, laundry loads, supplies, cat care, and the version 1.1 archive.
+A version 1.2 backup contains your rooms' chores and schedules (including the supplies each chore needs), every completion, skip, and move (with dates), as-needed history, next-week prep answers, laundry loads, supplies, cat care, and the version 1.1 archive. Backups made before these were added still restore normally.
 
 Tip: make a backup every week or two, and always before clearing Safari's website data.
 
@@ -172,9 +203,10 @@ To move your lists to your phone, make a backup on the iPad, open the file on th
 |------|------------------|
 | `index.html` | The **skeleton** of the page: the title, the four tabs, the week navigator, and the empty areas the app fills in. |
 | `styles.css` | The **look**: cream and blush pink with charcoal text, the frequency colours, rounded cards, and big buttons that are easy to tap. All colours are listed at the top. |
-| `schedule.js` | **Calendar rules** *(new)*: Saturday–Friday weeks, the approved room chore lists, when each frequency is due, overdue and upcoming chores, and adding, editing, deleting, skipping, and moving chores. |
+| `schedule.js` | **Calendar rules** *(new)*: Saturday–Friday weeks, the approved room chore lists, when each frequency is due, overdue and upcoming chores, the Heads up summary, and adding, editing, deleting, skipping, and moving chores. |
 | `laundry.js` | **Laundry rules** *(new)*: the four steps, one washer and one dryer, extra drying, and put-away tracking. |
 | `storage.js` | **Saving and safety** *(new)*: the version 1.2 data format, the one-time upgrade from 1.1, loading and saving, and checking backups before restoring. |
+| `prep.js` | **Next-week prep** *(new)*: finds next week's chores that need supplies, and handles **I'm stocked**, **Add to supplies**, and undo without duplicates. |
 | `logic.js` | **Supplies and cat-care rules**, plus the version 1.1 backup checker (unchanged from version 1.1). |
 | `app.js` | The **wiring**: draws every screen, responds to taps, and saves changes. |
 | `tests.html` | The **self-check page**: runs every automatic test and lists the manual checks. |
@@ -189,6 +221,8 @@ To move your lists to your phone, make a backup on the iPad, open the file on th
 - **Calculated, not stored:** the app doesn't store "Clean toilet, week of Nov 7: not done". It *calculates* what's due from the frequency rule and only stores what you actually did. That's why viewing other weeks can't change anything.
 - **Day numbers:** dates are turned into "days since 1970" for maths, which avoids clock problems like daylight-saving time.
 - **Validation:** checking every part of data (like a backup file) before trusting it, so a damaged file is refused instead of breaking the app.
+- **Optional fields:** new data (chore supplies, prep answers) was added as *optional*, so older data and backups that don't have it are still valid. No extra migration is needed.
+- **Built-in disclosure (`<details>`):** the Heads up rows and the prep card use the browser's own show/hide element, which works with taps, the keyboard (Enter), and screen readers without extra code.
 - **A state machine:** something that can only be in certain states with certain moves between them, like a laundry load going waiting → washer → dryer → finished.
 
 ## Preview the app
