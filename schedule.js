@@ -163,6 +163,13 @@
     return formatDate(week, false) + ' – ' + formatDate(weekEnd(week), true);
   }
 
+  // A short range for labels: "Oct 24–30" or "Oct 31–Nov 6".
+  function formatRangeShort(week) {
+    var end = weekEnd(week);
+    var endText = end.slice(5, 7) === week.slice(5, 7) ? String(Number(end.slice(8, 10))) : formatShort(end);
+    return formatShort(week) + '–' + endText;
+  }
+
   // ---------- Frequency rules ----------
 
   // Is a chore with this frequency due in the cleaning week starting `week`?
@@ -251,9 +258,25 @@
     return out;
   }
 
+  // Sets a chore's supplies. An empty list is kept as [] ("you chose none"),
+  // so a default supply link is never added back after you removed it.
   function setSupplies(task, supplies) {
-    var clean = cleanSupplies(supplies);
-    if (clean.length) task.supplies = clean; else delete task.supplies;
+    task.supplies = cleanSupplies(supplies);
+  }
+
+  // Older version 1.2 data was saved before default supply links existed.
+  // Adds a default link only to an approved chore that has NO supplies field
+  // at all; chores you customised (including ones you cleared) are left alone.
+  // Returns the number of chores updated.
+  function addMissingDefaultSupplies(state) {
+    var updated = 0;
+    state.tasks.forEach(function (task) {
+      if (task.supplies === undefined && DEFAULT_TASK_SUPPLIES[task.id]) {
+        task.supplies = DEFAULT_TASK_SUPPLIES[task.id].slice();
+        updated++;
+      }
+    });
+    return updated;
   }
 
   // Adds a chore to a room. Returns the new task, or null if the name is blank.
@@ -263,7 +286,7 @@
     if (!clean || !roomById(roomId) || !FREQUENCIES[frequency]) return null;
     var task = { id: makeId(), room: roomId, name: clean, frequency: frequency, since: weekStart(today) };
     if (frequency === 'biweekly') task.anchor = isSaturday(anchor) ? anchor : BIWEEKLY_ANCHOR;
-    setSupplies(task, supplies);
+    if (cleanSupplies(supplies).length) setSupplies(task, supplies);
     state.tasks.push(task);
     return task;
   }
@@ -312,7 +335,43 @@
 
   // Deletes a record that no longer says anything (not done, skipped, or moved).
   function tidyRecord(state, record) {
-    if (!record.status && !record.movedTo) delete state.records[recordKey(record.taskId, record.week)];
+    if (!record.status && !record.movedTo && !record.note) delete state.records[recordKey(record.taskId, record.week)];
+  }
+
+  // A short note on one chore occurrence ("I didn't have trash bags").
+  // Saved with that week's record, so it stays in History after completion.
+  // An empty note clears it.
+  function setNote(state, taskId, week, text) {
+    var task = findTask(state, taskId);
+    if (!task) return false;
+    var note = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    var record = ensureRecord(state, task, week);
+    if (note) record.note = note; else delete record.note;
+    tidyRecord(state, record);
+    return true;
+  }
+
+  // Mark one occurrence done (keeps an existing completion date).
+  function setDone(state, taskId, week, today) {
+    var task = findTask(state, taskId);
+    if (!task) return false;
+    var record = ensureRecord(state, task, week);
+    if (record.status !== 'done') {
+      record.status = 'done';
+      record.completedOn = today;
+      record.name = task.name;
+    }
+    return true;
+  }
+
+  // Re-open one occurrence (the opposite of setDone). Notes and moves stay.
+  function setOpen(state, taskId, week) {
+    var record = getRecord(state, taskId, week);
+    if (!record) return false;
+    delete record.status;
+    delete record.completedOn;
+    tidyRecord(state, record);
+    return true;
   }
 
   function statusOf(record, effectiveWeek, currentWeek) {
@@ -431,6 +490,18 @@
     if (toWeek === week) delete record.movedTo; else record.movedTo = toWeek;
     tidyRecord(state, record);
     return true;
+  }
+
+  // For a FUTURE week in the room checklist: chores that are still open from
+  // before it (overdue now, or due this week and not done yet). Their status
+  // is NOT changed: this is only a preview of what will carry over.
+  function openBefore(state, roomId, viewWeek, today) {
+    var current = weekStart(today);
+    if (viewWeek <= current) return [];
+    var stillOpen = overdueOccurrences(state, roomId, today).concat(
+      occurrencesForWeek(state, roomId, current, today).filter(function (o) { return o.status === 'due'; })
+    );
+    return stillOpen.filter(function (o) { return o.effectiveWeek < viewWeek; });
   }
 
   function skipAllOverdue(state, roomId, today) {
@@ -560,7 +631,7 @@
     if (result.beforeActivation) return result;
 
     function item(o) {
-      return { task: o.task, week: o.week, effectiveWeek: o.effectiveWeek };
+      return { task: o.task, week: o.week, effectiveWeek: o.effectiveWeek, note: o.record && o.record.note ? o.record.note : '' };
     }
 
     var inWeek = occurrencesForWeek(state, null, week, today);
@@ -627,6 +698,11 @@
     formatDate: formatDate,
     formatShort: formatShort,
     formatWeekRange: formatWeekRange,
+    formatRangeShort: formatRangeShort,
+    setNote: setNote,
+    setDone: setDone,
+    setOpen: setOpen,
+    openBefore: openBefore,
     isDueInWeek: isDueInWeek,
     isScheduled: isScheduled,
     cleanName: cleanName,
@@ -654,6 +730,7 @@
     overview: overview,
     headsUp: headsUp,
     cleanSupplies: cleanSupplies,
+    addMissingDefaultSupplies: addMissingDefaultSupplies,
     DEFAULT_TASK_SUPPLIES: DEFAULT_TASK_SUPPLIES,
     weekHistory: weekHistory
   };
