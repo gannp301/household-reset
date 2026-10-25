@@ -51,20 +51,23 @@
 
       <!-- The list of rooms (the "home" of this tab) -->
       <div id="rooms-home">
-        <div class="card" id="reminders-card">
-          <h2 id="reminders-title">Reminders for this week</h2>
-          <p class="hint" id="reminders-scope"></p>
-          <div id="reminders"></div>
-        </div>
+        <section class="card heads-up" aria-labelledby="heads-up-title">
+          <h2 id="heads-up-title">Heads up</h2>
+          <p class="hint" id="heads-up-scope"></p>
+          <div id="heads-up-groups"></div>
+        </section>
 
         <h2 class="section-title">Rooms</h2>
         <div class="room-grid" id="room-grid"></div>
 
-        <div class="card">
-          <h2>Upcoming</h2>
-          <p class="hint">Less-frequent chores and the week they're next due.</p>
-          <ul class="upcoming-list" id="upcoming-list"></ul>
-        </div>
+        <details class="card prep-card" id="prep-card">
+          <summary class="prep-summary">
+            <span class="prep-heading">Get ready for next week</span>
+            <span class="chip prep-count" id="prep-count"></span>
+          </summary>
+          <p class="hint" id="prep-scope"></p>
+          <ul class="prep-list" id="prep-list"></ul>
+        </details>
 
         <div class="card legend">
           <h2>Colour key</h2>
@@ -181,6 +184,7 @@
   <script src="schedule.js"></script>
   <script src="laundry.js"></script>
   <script src="storage.js"></script>
+  <script src="prep.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
