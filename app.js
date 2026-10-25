@@ -15,6 +15,7 @@
   var S = window.HouseholdSchedule;
   var W = window.HouseholdLaundry;
   var H = window.HouseholdStorage;
+  var P = window.HouseholdPrep;
 
   var state = null;
   // 'ok'          saving normally
@@ -194,18 +195,6 @@
     return room ? room.name : 'Room';
   }
 
-  // Lists chore names, rarest first (quarterly, monthly, then every 2 weeks).
-  function namesList(occurrences, max) {
-    var sorted = occurrences.slice().sort(function (a, b) {
-      return S.FREQUENCIES[b.task.frequency].order - S.FREQUENCIES[a.task.frequency].order;
-    });
-    var names = sorted.slice(0, max).map(function (o) {
-      return o.task.name + ' (' + roomName(o.task.room) + ')';
-    });
-    if (occurrences.length > max) names.push('and ' + (occurrences.length - max) + ' more');
-    return names.join(', ');
-  }
-
   function miniProgress(percent) {
     var track = el('div', 'progress-track mini');
     var fill = el('div', 'progress-fill');
@@ -238,7 +227,7 @@
       ['Due', ov.due, ''],
       ['Completed', ov.completed, ''],
       ['Overdue', ov.overdue, ov.overdue ? 'stat-overdue' : ''],
-      ['Coming up', ov.upcoming, '']
+      ['Next week', ov.nextWeek, '']
     ].forEach(function (s) {
       var tile = el('div', 'stat ' + s[2]);
       tile.appendChild(el('span', 'stat-num', String(s[1])));
@@ -252,41 +241,105 @@
       ? 'This week is before you started room schedules (week of ' + S.formatShort(state.activatedWeek) +
         '), so nothing is tracked here. Older records are in History → Version 1.1 archive.'
       : 'Due and Completed are for the week shown. Overdue counts missed chores from all earlier weeks. ' +
-        'Coming up counts less-frequent chores due in the next 4 weeks.';
+        'Next week counts less-frequent chores due in the week after the one shown.';
   }
 
-  // ---------- Rooms home: reminders, room cards, upcoming ----------
+  // ---------- Rooms home: heads up, room cards, next-week prep ----------
 
-  // Reminders always describe the CURRENT week (based on today's date), even
-  // when the week navigator above is showing a different week.
-  function renderReminders() {
-    var box = document.getElementById('reminders');
-    box.textContent = '';
-    var cw = currentWeek();
-    var t = today();
-    document.getElementById('reminders-scope').textContent = 'Based on today: ' + S.formatWeekRange(cw) + '.' +
-      (selectedWeek !== cw ? ' You\'re viewing a different week above; these reminders stay on the current week.' : '');
-    var overdue = S.overdueOccurrences(state, null, t);
-    var dueNow = S.occurrencesForWeek(state, null, cw, t).filter(function (o) {
-      return o.status === 'due' && o.task.frequency !== 'weekly';
-    });
-    var soon = S.occurrencesForWeek(state, null, S.addWeeks(cw, 1), t).filter(function (o) {
-      return o.status === 'upcoming' && o.task.frequency !== 'weekly';
-    });
-    var putAway = W.loadsNeedingPutAway(state.laundry).length;
-    var lines = [];
-    if (overdue.length) {
-      lines.push(['reminder-overdue', '⚠ ' + count(overdue.length, 'overdue chore', 'overdue chores') +
-        ' from earlier weeks. Open a room to catch up or skip.']);
+  // ---------- Heads up ----------
+
+  var HEADS_UP_STYLE = {
+    overdue: { icon: '⚠', className: 'hu-overdue' },
+    due: { icon: '★', className: 'hu-due' },
+    soon: { icon: '◷', className: 'hu-soon' }
+  };
+  var openHeadsUp = {}; // which groups you've expanded (kept while the app is open)
+
+  // "2 monthly · 1 every 2 weeks"
+  function frequencyBreakdown(items) {
+    var counts = {};
+    items.forEach(function (i) { counts[i.task.frequency] = (counts[i.task.frequency] || 0) + 1; });
+    return Object.keys(S.FREQUENCIES).filter(function (f) { return counts[f]; }).map(function (f) {
+      return counts[f] + ' ' + S.FREQUENCIES[f].label.toLowerCase();
+    }).join(' · ');
+  }
+
+  function headsUpText(group, relation) {
+    var n = group.items.length;
+    if (group.kind === 'overdue' && relation === 'current') {
+      var oldest = group.items.reduce(function (min, i) { return i.week < min ? i.week : min; }, group.items[0].week);
+      return [count(n, 'overdue chore', 'overdue chores'), 'From earlier weeks · oldest was due the week of ' + S.formatShort(oldest)];
     }
-    if (dueNow.length) lines.push(['reminder-now', '★ Due this week: ' + namesList(dueNow, 8) + '.']);
-    if (soon.length) lines.push(['reminder-soon', '◷ Next week: ' + namesList(soon, 8) + '.']);
-    if (putAway) lines.push(['reminder-laundry', '🧺 ' + count(putAway, 'laundry load', 'laundry loads') + ' to put away.']);
-    if (!lines.length) lines.push(['reminder-clear', '✓ All caught up for now.']);
-    var ul = el('ul', 'reminder-list');
-    lines.forEach(function (line) { ul.appendChild(el('li', line[0], line[1])); });
-    box.appendChild(ul);
-    box.appendChild(el('p', 'hint', 'Reminders appear here in the app only. Household Reset does not send phone notifications.'));
+    if (group.kind === 'overdue') {
+      return [count(n, 'chore', 'chores') + ' missed in this week', 'Still overdue · tick them from their rooms'];
+    }
+    if (group.kind === 'due') {
+      return [count(n, 'less-frequent chore', 'less-frequent chores') + (relation === 'current' ? ' due this week' : ' due in this week'),
+        frequencyBreakdown(group.items)];
+    }
+    return [count(n, 'monthly or quarterly chore', 'monthly or quarterly chores') + (relation === 'current' ? ' next week' : ' the week after'),
+      'Week of ' + S.formatShort(group.week) + ' · ' + frequencyBreakdown(group.items)];
+  }
+
+  function headsUpItem(item, kind) {
+    var li = el('li', 'hu-item');
+    li.appendChild(el('span', 'hu-item-name', item.task.name));
+    var badges = el('span', 'badges');
+    badges.appendChild(el('span', 'badge', roomName(item.task.room)));
+    badges.appendChild(freqBadge(item.task.frequency));
+    if (kind === 'overdue') badges.appendChild(el('span', 'badge status-overdue', 'Due week of ' + S.formatShort(item.week)));
+    else if (item.effectiveWeek !== item.week) badges.appendChild(el('span', 'badge status-moved', 'Moved from week of ' + S.formatShort(item.week)));
+    li.appendChild(badges);
+    return li;
+  }
+
+  // Follows the week selected in the navigator, and says which week that is.
+  function renderHeadsUp() {
+    var hu = S.headsUp(state, selectedWeek, today());
+    var label = { current: 'this week', past: 'a past week', future: 'a future week' }[hu.relation];
+    document.getElementById('heads-up-scope').textContent =
+      'For the week shown above: ' + S.formatWeekRange(selectedWeek) + ' (' + label + ').';
+    var box = document.getElementById('heads-up-groups');
+    box.textContent = '';
+
+    if (hu.beforeActivation || !hu.groups.length) {
+      box.appendChild(el('p', 'hu-clear', hu.beforeActivation
+        ? 'Room schedules hadn\'t started yet in this week.'
+        : '✓ All clear. Nothing needs extra attention ' + (hu.relation === 'current' ? 'this week.' : 'in this week.')));
+      return;
+    }
+
+    var list = el('ul', 'hu-list');
+    hu.groups.forEach(function (group) {
+      var style = HEADS_UP_STYLE[group.kind];
+      var text = headsUpText(group, hu.relation);
+      var li = el('li');
+      var details = el('details', 'hu-group ' + style.className);
+      details.open = !!openHeadsUp[group.kind];
+      var summary = el('summary', 'hu-summary');
+      var icon = el('span', 'hu-icon', style.icon);
+      icon.setAttribute('aria-hidden', 'true');
+      var words = el('span', 'hu-text');
+      words.appendChild(el('strong', 'hu-title', text[0]));
+      words.appendChild(el('span', 'hu-sub', text[1]));
+      var toggle = el('span', 'hu-toggle', details.open ? 'Hide details' : 'Show details');
+      summary.appendChild(icon);
+      summary.appendChild(words);
+      summary.appendChild(toggle);
+      details.appendChild(summary);
+
+      var items = el('ul', 'hu-items');
+      group.items.slice(0, 25).forEach(function (item) { items.appendChild(headsUpItem(item, group.kind)); });
+      if (group.items.length > 25) items.appendChild(el('li', 'hint', 'and ' + (group.items.length - 25) + ' more'));
+      details.appendChild(items);
+      details.addEventListener('toggle', function () {
+        openHeadsUp[group.kind] = details.open;
+        toggle.textContent = details.open ? 'Hide details' : 'Show details';
+      });
+      li.appendChild(details);
+      list.appendChild(li);
+    });
+    box.appendChild(list);
   }
 
   function laundrySummary() {
@@ -334,27 +387,134 @@
     });
   }
 
-  function renderUpcoming() {
-    var ul = document.getElementById('upcoming-list');
+  // ---------- Get ready for next week ----------
+
+  var prepOpenChoice = null; // null = open automatically when something needs an answer
+  var settingPrepOpen = false;
+
+  function joinNames(names) {
+    if (names.length <= 1) return names.join('');
+    return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+  }
+
+  var SUPPLY_STATUS = {
+    missing: 'not on your Supplies list',
+    ticked: 'on your Supplies list, ticked as stocked',
+    needed: 'on your Supplies list, marked as needed'
+  };
+
+  var ADD_LABELS = { add: 'Add to supplies', mark: 'Mark as needed', both: 'Add / mark as needed' };
+
+  function supplyNamesById(ids) {
+    return state.supplies.filter(function (s) { return ids.indexOf(s.id) > -1; }).map(function (s) { return s.name; });
+  }
+
+  // One row per question. `group` holds every chore occurrence next week that
+  // needs exactly these supplies.
+  function renderPrepGroup(group) {
+    var first = group.prompts[0];
+    var names = group.supplies.map(function (s) { return s.name; });
+    var li = el('li', 'prep-item freq-' + first.task.frequency);
+
+    var forList = el('ul', 'prep-chores');
+    forList.setAttribute('aria-label', 'Chores next week that need ' + joinNames(names));
+    group.prompts.forEach(function (p) {
+      var row = el('li');
+      row.appendChild(el('span', 'prep-chore', p.task.name));
+      row.appendChild(el('span', 'badge', roomName(p.task.room)));
+      forList.appendChild(row);
+    });
+
+    var actions = el('div', 'prep-actions');
+    if (!group.pending.length) {
+      var a = first.answer;
+      var said;
+      if (a.answer === 'stocked') {
+        said = '✓ You have ' + joinNames(names) + '.';
+      } else {
+        var added = [];
+        var marked = [];
+        group.prompts.forEach(function (p) {
+          added = added.concat(supplyNamesById(p.answer.added));
+          marked = marked.concat(supplyNamesById(p.answer.marked.map(function (m) { return m.id; })));
+        });
+        marked = marked.filter(function (n) { return added.indexOf(n) === -1; });
+        var parts = [];
+        if (added.length) parts.push('Added ' + joinNames(added) + ' to Supplies');
+        if (marked.length) parts.push((added.length ? 'marked ' : 'Marked ') + joinNames(marked) + ' as needed');
+        said = '✓ ' + (parts.length ? parts.join(' and ') : 'Updated Supplies') + '.';
+      }
+      li.appendChild(el('p', 'prep-answer', said));
+      li.appendChild(forList);
+      var change = button('prep-undo', 'Change answer', 'btn-small', { group: group.key });
+      change.setAttribute('aria-label', 'Change answer about ' + joinNames(names));
+      actions.appendChild(change);
+    } else {
+      li.appendChild(el('p', 'prep-question', 'Do you have ' + joinNames(names) + '?'));
+      li.appendChild(el('p', 'prep-status', group.supplies.map(function (s) {
+        return s.name + ': ' + SUPPLY_STATUS[s.status];
+      }).join(' · ')));
+      li.appendChild(forList);
+      var stocked = button('prep-stocked', 'I\'m stocked', 'btn-quiet btn-compact', { group: group.key });
+      stocked.setAttribute('aria-label', 'I\'m stocked with ' + joinNames(names));
+      var addLabel = ADD_LABELS[P.addAction(group.pending[0])];
+      var add = button('prep-add', addLabel, 'btn-primary btn-compact', { group: group.key });
+      add.setAttribute('aria-label', addLabel + ': ' + joinNames(names));
+      actions.appendChild(stocked);
+      actions.appendChild(add);
+    }
+    li.appendChild(actions);
+    return li;
+  }
+
+  // Only next week's chores that list supplies they need.
+  function renderPrep() {
+    var t = today();
+    var groups = P.groupPrompts(P.prompts(state, t));
+    var pending = groups.filter(function (g) { return g.pending.length; }).length;
+    document.getElementById('prep-scope').textContent = 'Next week: ' + S.formatWeekRange(P.nextWeek(t)) +
+      '. Only chores that need supplies are listed.';
+    document.getElementById('prep-count').textContent = pending
+      ? pending + ' to check' : groups.length ? 'All set' : 'Nothing needed';
+    var card = document.getElementById('prep-card');
+    var shouldOpen = prepOpenChoice === null ? pending > 0 : prepOpenChoice;
+    if (card.open !== shouldOpen) {
+      settingPrepOpen = true;
+      card.open = shouldOpen;
+    }
+
+    var ul = document.getElementById('prep-list');
     ul.textContent = '';
-    var cw = currentWeek();
-    var list = S.upcoming(state, today(), 14).filter(function (u) { return u.week > cw; }).slice(0, 15);
-    if (!list.length) {
-      ul.appendChild(el('li', 'empty', 'Nothing coming up in the next few months.'));
+    if (!groups.length) {
+      ul.appendChild(el('li', 'hu-clear', 'Nothing to prepare for next week.'));
       return;
     }
-    list.forEach(function (u) {
-      var li = el('li', 'upcoming-item freq-' + u.task.frequency);
-      var when = el('span', 'upcoming-when', S.formatDate(u.week) + ' · ' +
-        (u.weeksAway === 1 ? 'next week' : 'in ' + u.weeksAway + ' weeks'));
-      li.appendChild(when);
-      li.appendChild(el('span', 'upcoming-name', u.task.name + (u.moved ? ' (moved)' : '')));
-      var meta = el('span', 'badges');
-      meta.appendChild(el('span', 'badge', roomName(u.task.room)));
-      meta.appendChild(freqBadge(u.task.frequency));
-      li.appendChild(meta);
-      ul.appendChild(li);
-    });
+    groups.forEach(function (group) { ul.appendChild(renderPrepGroup(group)); });
+  }
+
+  // Answers (or undoes) the question for every chore in the group. Each
+  // chore occurrence still gets its own saved answer.
+  function onPrepClick(event) {
+    var btn = event.target.closest('button[data-action]');
+    if (!btn) return;
+    var key = btn.dataset.group;
+    var t = today();
+    var group = P.groupPrompts(P.prompts(state, t)).filter(function (g) { return g.key === key; })[0];
+    if (!group) return;
+    var action = btn.dataset.action;
+    if (action === 'prep-undo') {
+      group.prompts.slice().reverse().forEach(function (p) { P.undoAnswer(state, p.key); });
+    } else if (action === 'prep-stocked') {
+      group.pending.forEach(function (p) { P.answerStocked(state, p, t); });
+    } else if (action === 'prep-add') {
+      group.pending.forEach(function (p) { P.addToSupplies(state, p, t); });
+    } else {
+      return;
+    }
+    save();
+    render();
+    var again = document.querySelector('#prep-list [data-group="' + key.replace(/"/g, '\\"') + '"]');
+    if (again) again.focus();
   }
 
   function renderLegend() {
@@ -519,6 +679,18 @@
     rotation.hidden = freq.value !== 'biweekly';
     form.appendChild(rotation);
 
+    // Optional supplies, used by "Get ready for next week".
+    var supplies = el('input');
+    supplies.type = 'text';
+    supplies.name = 'supplies';
+    supplies.maxLength = 200;
+    supplies.autocomplete = 'off';
+    supplies.className = 'supplies-input';
+    supplies.placeholder = 'Supplies it needs (optional, separate with commas)';
+    supplies.value = task && task.supplies ? task.supplies.join(', ') : '';
+    supplies.setAttribute('aria-label', 'Supplies this chore needs (optional, separate with commas)');
+    form.appendChild(supplies);
+
     var submit = el('button', 'btn btn-primary', task ? 'Save' : 'Add');
     submit.type = 'submit';
     form.appendChild(submit);
@@ -546,6 +718,7 @@
       badges.appendChild(freqBadge(task.frequency));
       var next = S.nextDueWeek(state, task, today());
       if (next) badges.appendChild(el('span', 'badge', 'Next due ' + S.formatShort(next)));
+      if (task.supplies) badges.appendChild(el('span', 'badge', 'Needs: ' + task.supplies.join(', ')));
       body.appendChild(badges);
       var actions = el('div', 'item-actions');
       var edit = button('edit-task', 'Edit', 'btn-small', { task: task.id });
@@ -982,9 +1155,9 @@
     if (openRoom) {
       renderRoomView();
     } else {
-      renderReminders();
+      renderHeadsUp();
       renderRoomGrid();
-      renderUpcoming();
+      renderPrep();
     }
     renderList('supplies');
     renderList('pets');
@@ -1100,9 +1273,10 @@
       var name = form.elements.name.value;
       var frequency = form.elements.frequency.value;
       var anchor = form.elements.anchor.value;
+      var supplies = form.elements.supplies.value;
       var ok = form.dataset.mode === 'edit'
-        ? S.editTask(state, form.dataset.task, name, frequency, anchor, t)
-        : S.addTask(state, openRoom, name, frequency, anchor, t);
+        ? S.editTask(state, form.dataset.task, name, frequency, anchor, t, supplies)
+        : S.addTask(state, openRoom, name, frequency, anchor, t, supplies);
       if (!ok) {
         form.elements.name.focus();
         return;
@@ -1409,6 +1583,13 @@
     roomContent.addEventListener('click', onRoomClick);
     roomContent.addEventListener('submit', onRoomSubmit);
     roomContent.addEventListener('change', onRoomChange);
+
+    document.getElementById('prep-list').addEventListener('click', onPrepClick);
+    document.getElementById('prep-card').addEventListener('toggle', function () {
+      // Remember your choice only when YOU open or close it.
+      if (settingPrepOpen) settingPrepOpen = false;
+      else prepOpenChoice = document.getElementById('prep-card').open;
+    });
 
     Object.keys(LISTS).forEach(function (listName) {
       var ul = document.getElementById('list-' + listName);
