@@ -57,7 +57,9 @@ Changing how often a chore repeats starts its new schedule from the current week
 
 ## How overdue chores work
 
-- If a scheduled chore isn't done by Friday night, it becomes **overdue**. It appears in its room under **Overdue from earlier weeks**, labelled with the week it was originally due.
+- If a scheduled chore isn't done by Friday night, it **carries over automatically** and becomes **overdue**. It appears in its room under **Overdue (carried over)**, labelled **Overdue from Oct 24** (its original due week). No button is needed for this.
+- The chore's next regular occurrence is still scheduled as normal. For example, an every-2-weeks mirror left from Oct 24 is overdue during Oct 31–Nov 6, and the next mirror is still due Nov 7–13. Finishing the overdue one doesn't tick the new one.
+- **Looking ahead:** if you browse to a future week, chores that are still open now are shown under **Still open from earlier weeks**, labelled **Open from Oct 24 · overdue after Oct 30**. Browsing never makes anything overdue early.
 - A missed chore **stays overdue** until you tick it or skip it. A new week's copy of the same chore doesn't replace or hide it.
 - If you miss several weeks, each missed week is listed **once**. Nothing piles up twice.
 - Ticking an overdue chore saves **today's date** as the real completion date and keeps the original due week, so History shows it as done late.
@@ -75,14 +77,36 @@ It shows **at most three short rows**, most important first:
 
 | Row | When viewing this week | When viewing another week |
 |-----|------------------------|---------------------------|
-| ⚠ **Overdue** (amber) | Missed chores from earlier weeks | Past week: that week's chores still not done. Future week: not shown. |
-| ★ **Due** | Every-2-weeks, monthly, and quarterly chores due this week | The same, for the week shown |
-| ◷ **Coming up** | Monthly and quarterly chores due next week | Those due the week after the one shown |
+| ⚠ **Overdue from Oct 24** (amber) | Missed chores from earlier weeks | Past week: that week's chores still not done. Future week: not shown. |
+| ★ **Due Oct 31–Nov 6** | Every-2-weeks, monthly, and quarterly chores due this week | The same, for the week shown |
+| ◷ **Coming next week: Nov 7–13** | Monthly and quarterly chores due next week | "Coming the week after", for the week after the one shown |
+
+The line under the title says exactly what's summarized, for example **Summarizing Oct 31–Nov 6 · today's week**. When you browse, it says **a past week you're viewing (not today's week)** or **a future week you're viewing (not today's week)**. Expanded overdue details also show any note you left on a chore.
 
 - Ordinary weekly chores aren't repeated here. They're already in each room. They only appear if they're overdue.
 - Tap a row (or press Enter on it) to **Show details**: each chore's name, room, and frequency.
 - A chore is only ever listed under the week it actually belongs to.
 - When nothing needs attention, it just says **All clear**.
+
+## Notes on chores
+
+You can leave a short note on one occurrence of a chore, for example "I didn't have trash bags". Tap **More** on the chore and use **Add note**, or add it while finishing the week.
+
+- The note belongs to that week's occurrence, not the chore itself, so next time starts fresh.
+- The checklist only shows a small **📝 Note** marker. The full text appears under **More**, in expanded Heads up overdue details, and in History, where it stays even after the chore is done.
+- Notes can be edited or cleared at any time.
+
+## Finish Cleaning Week (optional)
+
+An optional look back at a week. Use the **Finish Cleaning Week** button on the week card. It's available for this week and earlier weeks, not future ones.
+
+1. It shows the Saturday–Friday dates and how many chores were **scheduled**, **completed**, and **unfinished**, with unfinished chores grouped by room.
+2. Each unfinished chore has exactly **two choices**:
+   - **Carry Over** (the default) leaves the chore open. It becomes overdue after the week ends, keeps its original due date, and the schedule doesn't change. You can add an optional note and an optional **Add needed supply** (with a suggestion if the chore has a supply link). If the supply already exists, it's marked as needed instead of being added again.
+   - **Done** marks it complete with today's date.
+3. **Review summary** shows how many chores will be marked Done or carried over, and how many notes and supplies will change. Tap **Confirm**, or **Go Back** to change something.
+
+Chores you already ticked stay completed. The review never clears the checklist, never locks the week, and never changes schedules. You can reopen it any time with **Edit week review**. Weeks move on by themselves whether or not you use it.
 
 ## Get ready for next week
 
@@ -93,7 +117,8 @@ This card looks only at **next week** (the next Saturday to Friday) and only at 
 - **Add to supplies** puts the item on your Supplies list as needed (unticked). If it's already on the list, the button says **Mark as needed** instead, so nothing is added twice.
 - Being on the Supplies list never counts as "in stock". The question is still asked, and it shows whether the item is ticked.
 - Answers are saved for that specific chore occurrence, so they don't come back after a refresh. The same chore's next occurrence asks again.
-- **Change answer** undoes it: the question comes back, items it added are removed (unless another answer still uses them), and items it marked get their old tick back.
+- **Change answer** undoes it: the question comes back, items it added are removed (unless another answer still uses them), and items it marked get their old tick back. If you've changed one of those items on the Supplies tab since (for example, ticked it after buying it), undo leaves it alone and tells you so.
+- Supply links that came with the app (like scent plugin refills) are added to older saved data the first time it loads. A chore whose supplies you've edited, or cleared, is never changed.
 - Tap the heading to collapse or expand the card. It opens by itself when something needs checking.
 - To give any chore its own supplies, open its room → **All chores in this room** → **Edit**, and fill in **Supplies it needs** (separate items with commas).
 
@@ -206,6 +231,7 @@ To move your lists to your phone, make a backup on the iPad, open the file on th
 | `schedule.js` | **Calendar rules** *(new)*: Saturday–Friday weeks, the approved room chore lists, when each frequency is due, overdue and upcoming chores, the Heads up summary, and adding, editing, deleting, skipping, and moving chores. |
 | `laundry.js` | **Laundry rules** *(new)*: the four steps, one washer and one dryer, extra drying, and put-away tracking. |
 | `storage.js` | **Saving and safety** *(new)*: the version 1.2 data format, the one-time upgrade from 1.1, loading and saving, and checking backups before restoring. |
+| `review.js` | **Finish Cleaning Week** *(new)*: the review screen's counts, the Carry Over / Done choices, notes, and supplies, applied only when you confirm. |
 | `prep.js` | **Next-week prep** *(new)*: finds next week's chores that need supplies, and handles **I'm stocked**, **Add to supplies**, and undo without duplicates. |
 | `logic.js` | **Supplies and cat-care rules**, plus the version 1.1 backup checker (unchanged from version 1.1). |
 | `app.js` | The **wiring**: draws every screen, responds to taps, and saves changes. |
