@@ -931,6 +931,7 @@ select:focus-visible,
   background: var(--overdue-bg);
   color: var(--overdue-ink);
   font-weight: 600;
+  white-space: nowrap; /* keep "Overdue from Oct 24" on one line */
 }
 
 .task-row.status-overdue {
@@ -969,6 +970,182 @@ select:focus-visible,
 .form-hint {
   flex-basis: 100%;
   margin: 0;
+}
+
+/* ---------- Notes, carry-over preview, and Heads up context ---------- */
+.note-badge {
+  background: var(--cream-deep);
+  color: var(--charcoal);
+}
+
+.note-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.note-wrap .note-input {
+  flex: 1 1 220px;
+}
+
+.hu-note {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--charcoal-soft);
+}
+
+.hu-scope-other {
+  font-weight: 600;
+  color: var(--blush-deep);
+}
+
+.carry-preview {
+  border-style: dashed;
+}
+
+.prep-message {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--cream);
+  font-size: 0.9rem;
+}
+
+/* ---------- Finish Cleaning Week ---------- */
+.review-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.chip-reviewed {
+  background: var(--weekly-bg);
+  color: var(--weekly-ink);
+}
+
+.review-view {
+  border-color: var(--blush-strong);
+}
+
+.review-view h2:focus {
+  outline: none;
+}
+
+.review-range {
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+
+.review-stats {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.review-room {
+  margin: 18px 0 6px;
+  font-size: 1.05rem;
+}
+
+.review-list,
+.review-summary {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.review-summary li {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--cream);
+  font-weight: 600;
+}
+
+.review-item {
+  padding: 12px 12px 12px 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--f-line);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+.review-item-name {
+  display: block;
+  font-weight: 600;
+}
+
+/* Two side-by-side choices built from radio buttons */
+.choice {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 8px;
+  padding: 0;
+  border: none;
+}
+
+.choice-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--cream);
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.choice-option:has(input:checked) {
+  border-color: var(--blush-deep);
+  background: var(--blush);
+}
+
+.choice-option input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--blush-deep);
+}
+
+.choice-option:focus-within {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+}
+
+.review-note,
+.review-supply-input {
+  width: 100%;
+}
+
+.review-supply {
+  margin-top: 8px;
+}
+
+.review-supply-summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 600;
+  color: var(--blush-deep);
+  cursor: pointer;
+}
+
+.supply-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.supply-status {
+  margin: 6px 0 0;
 }
 
 /* ---------- Laundry ---------- */
