@@ -267,6 +267,7 @@
     soon: { icon: '◷', className: 'hu-soon' }
   };
   var openHeadsUp = {}; // which groups you've expanded (kept while the app is open)
+  var openHeadsUpRooms = {}; // which room sections inside them you've expanded
 
   // "2 monthly · 1 every 2 weeks"
   function frequencyBreakdown(items) {
@@ -307,10 +308,9 @@
     var li = el('li', 'hu-item');
     li.appendChild(el('span', 'hu-item-name', item.task.name));
     var badges = el('span', 'badges');
-    badges.appendChild(el('span', 'badge', roomName(item.task.room)));
     badges.appendChild(freqBadge(item.task.frequency));
-    if (kind === 'overdue') badges.appendChild(el('span', 'badge status-overdue', 'Overdue from ' + S.formatShort(item.week)));
-    else if (item.effectiveWeek !== item.week) badges.appendChild(el('span', 'badge status-moved', 'Moved from week of ' + S.formatShort(item.week)));
+    if (kind === 'overdue') badges.appendChild(el('span', 'badge status-overdue', 'Overdue'));
+    else if (item.effectiveWeek !== item.week) badges.appendChild(el('span', 'badge status-moved', 'Moved to ' + S.formatShort(item.effectiveWeek)));
     li.appendChild(badges);
     if (item.note) li.appendChild(el('p', 'hu-note', 'Note: ' + item.note));
     return li;
@@ -356,10 +356,26 @@
       summary.appendChild(toggle);
       details.appendChild(summary);
 
-      var items = el('ul', 'hu-items');
-      group.items.slice(0, 25).forEach(function (item) { items.appendChild(headsUpItem(item, group.kind)); });
-      if (group.items.length > 25) items.appendChild(el('li', 'hint', 'and ' + (group.items.length - 25) + ' more'));
-      details.appendChild(items);
+      // Inside each reminder, one collapsible section per room that has any.
+      var rooms = el('div', 'hu-rooms');
+      S.ROOMS.forEach(function (room) {
+        var inRoom = group.items.filter(function (i) { return i.task.room === room.id; });
+        if (!inRoom.length) return;
+        var key = group.kind + '|' + room.id;
+        var roomBox = el('details', 'hu-room');
+        roomBox.open = !!openHeadsUpRooms[key];
+        var roomSummary = el('summary', 'hu-room-summary');
+        roomSummary.appendChild(el('span', 'hu-room-name', room.icon + ' ' + room.name));
+        roomSummary.appendChild(el('span', 'hu-room-count', String(inRoom.length)));
+        roomSummary.setAttribute('aria-label', room.name + ', ' + count(inRoom.length, 'chore', 'chores'));
+        roomBox.appendChild(roomSummary);
+        var items = el('ul', 'hu-items');
+        inRoom.forEach(function (item) { items.appendChild(headsUpItem(item, group.kind)); });
+        roomBox.appendChild(items);
+        roomBox.addEventListener('toggle', function () { openHeadsUpRooms[key] = roomBox.open; });
+        rooms.appendChild(roomBox);
+      });
+      details.appendChild(rooms);
       details.addEventListener('toggle', function () {
         openHeadsUp[group.kind] = details.open;
         toggle.textContent = details.open ? 'Hide details' : 'Show details';
@@ -368,6 +384,17 @@
       list.appendChild(li);
     });
     box.appendChild(list);
+  }
+
+  // Which cleaning week laundry put-away reminders are measured against.
+  // Laundry isn't saved per week, so it always shows today's real loads:
+  //  - this week or a past week: loads finished before THIS week and not
+  //    put away are overdue;
+  //  - a future week: those, plus loads that would still be waiting by then
+  //    ("Not put away yet"). Looking ahead never marks anything overdue.
+  function laundryWeek() {
+    var cw = currentWeek();
+    return selectedWeek > cw ? selectedWeek : cw;
   }
 
   function laundrySummary() {
@@ -411,7 +438,7 @@
       card.appendChild(miniProgress(progress.percent));
       if (overdue) card.appendChild(el('span', 'chip chip-overdue', '⚠ ' + overdue + ' overdue'));
       if (room.id === 'laundry') {
-        var lateLoads = W.overduePutAway(state.laundry, currentWeek()).length;
+        var lateLoads = W.overduePutAway(state.laundry, laundryWeek()).length;
         if (lateLoads) card.appendChild(el('span', 'chip chip-overdue', '⚠ ' + count(lateLoads, 'load', 'loads') + ' to put away from earlier weeks'));
       }
       card.setAttribute('aria-label', room.name + ': ' + meta + (overdue ? ', ' + overdue + ' overdue' : ''));
@@ -579,24 +606,25 @@
     return o.task.id + '|' + o.week;
   }
 
+  // Short status labels only. The original scheduled week is still stored
+  // (History and overdue rules use it); the checklist doesn't repeat it.
   function statusBadges(o) {
     var badges = [];
+    var moved = o.effectiveWeek !== o.week;
     if (o.status === 'done') {
-      var late = o.record.completedOn > S.weekEnd(o.effectiveWeek);
-      badges.push(el('span', 'badge status-done', '✓ Done ' + S.formatShort(o.record.completedOn) + (late ? ' (late)' : '')));
+      badges.push(el('span', 'badge status-done', '✓ Done ' + S.formatShort(o.record.completedOn)));
     } else if (o.status === 'skipped') {
-      badges.push(el('span', 'badge status-skipped', '⤼ Skipped'));
+      // Saved by an older version, when Skip meant "dismiss". Kept as it was.
+      badges.push(el('span', 'badge status-skipped', 'Skipped (dismissed)'));
     } else if (o.status === 'overdue') {
-      badges.push(el('span', 'badge status-overdue', '⚠ Overdue from ' + S.formatShort(o.week)));
+      badges.push(el('span', 'badge status-overdue', '⚠ Overdue'));
+    } else if (moved) {
+      badges.push(el('span', 'badge status-moved', 'Moved to ' + S.formatShort(o.effectiveWeek)));
     } else if (o.status === 'due' && o.effectiveWeek < selectedWeek) {
-      // Shown in a future week's list: still open now, not overdue yet.
-      badges.push(el('span', 'badge status-upcoming', '◷ Open from ' + S.formatShort(o.week) +
-        ' · overdue after ' + S.formatShort(S.weekEnd(o.effectiveWeek))));
-    } else if (o.status === 'upcoming') {
-      badges.push(el('span', 'badge status-upcoming', '◷ Upcoming'));
+      badges.push(el('span', 'badge status-upcoming', 'Due this week'));
     }
-    if (o.effectiveWeek !== o.week && o.status !== 'overdue') {
-      badges.push(el('span', 'badge status-moved', '→ Moved from week of ' + S.formatShort(o.week)));
+    if (o.deferred && !moved && o.status !== 'done' && o.status !== 'skipped') {
+      badges.push(el('span', 'badge status-skipped', 'Skipped for now'));
     }
     return badges;
   }
@@ -663,12 +691,20 @@
       var editChore = button('edit-task-inline', 'Edit chore', 'btn-quiet', data);
       editChore.setAttribute('aria-label', 'Edit chore "' + o.task.name + '" (name, frequency, supplies)');
       actions.appendChild(editChore);
-      actions.appendChild(button('skip', o.status === 'skipped' ? 'Undo skip' : 'Skip this week', 'btn-quiet', data));
-      if (!done) {
-        var moveWrap = el('div', 'move-wrap');
-        moveWrap.appendChild(moveSelect(o));
-        moveWrap.appendChild(button('move', 'Move', 'btn-quiet', data));
-        actions.appendChild(moveWrap);
+      var skippedNow = o.deferred && !done && o.status !== 'skipped';
+      if (o.status === 'skipped') {
+        // An older "dismissed" skip: reopening it is your choice.
+        actions.appendChild(button('undo-old-skip', 'Undo skip (reopen)', 'btn-quiet', data));
+      } else if (!done && !o.deferred) {
+        actions.appendChild(button('skip-now', 'Skip for now', 'btn-quiet', data));
+      }
+      li.appendChild(actions);
+      if (!skippedNow && !note) return li;
+
+      // Shown after "Skip for now" (or when this occurrence already has a note).
+      var more = el('div', 'skip-panel');
+      if (skippedNow) {
+        more.appendChild(el('p', 'hint', 'Skipped for now: it stays unfinished and becomes overdue if its week ends.'));
       }
       // A note for this occurrence only (it stays in History).
       var noteWrap = el('div', 'note-wrap');
@@ -677,14 +713,22 @@
       noteInput.className = 'note-input';
       noteInput.maxLength = 200;
       noteInput.value = note;
-      noteInput.placeholder = 'Note (optional), e.g. "No trash bags"';
+      noteInput.placeholder = 'Reason or note (optional)';
       noteInput.setAttribute('aria-label', 'Note for "' + o.task.name + '" (week of ' + S.formatShort(o.week) + ')');
       noteWrap.appendChild(noteInput);
       noteWrap.appendChild(button('save-note', note ? 'Save note' : 'Add note', 'btn-quiet', data));
       if (note) noteWrap.appendChild(button('clear-note', 'Clear note', 'btn-small', data));
-      actions.appendChild(noteWrap);
-      actions.appendChild(renderSupplyAdder(o.task, 'room:' + occurrenceKey(o)));
-      li.appendChild(actions);
+      more.appendChild(noteWrap);
+      if (skippedNow) {
+        more.appendChild(renderSupplyAdder(o.task, 'room:' + occurrenceKey(o)));
+        var moveWrap = el('div', 'move-wrap');
+        moveWrap.appendChild(el('span', 'move-label', 'Move to another cleaning week:'));
+        moveWrap.appendChild(moveSelect(o));
+        moveWrap.appendChild(button('move', 'Move', 'btn-quiet', data));
+        more.appendChild(moveWrap);
+        more.appendChild(button('undo-skip-now', 'Undo Skip', 'btn-quiet', data));
+      }
+      li.appendChild(more);
     }
     return li;
   }
@@ -857,19 +901,18 @@
     if (selectedWeek === cw) {
       var overdue = S.overdueOccurrences(state, room.id, t);
       if (overdue.length) {
-        var od = sectionBlock('Overdue (carried over)', 'Unfinished chores from earlier weeks. They keep their original due date until you finish them.');
+        var od = sectionBlock('Overdue', 'Unfinished chores from earlier weeks, including ones you skipped for now. They stay until you finish them.');
         od.classList.add('overdue-section');
         var odList = el('ul', 'item-list');
         overdue.forEach(function (o) { odList.appendChild(renderOccurrence(o)); });
         od.appendChild(odList);
-        od.appendChild(button('skip-all', 'Skip all overdue in this room', 'btn-quiet'));
         content.appendChild(od);
       }
     } else if (selectedWeek > cw) {
       var open = S.openBefore(state, room.id, selectedWeek, t);
       if (open.length) {
-        var ob = sectionBlock('Still open from earlier weeks', 'If these aren\'t done before ' + S.formatRangeShort(selectedWeek) +
-          ', they\'ll carry over into it as overdue. Looking ahead doesn\'t change anything.');
+        var ob = sectionBlock('Still open now', 'Not done yet. If they\'re still open when ' + S.formatRangeShort(selectedWeek) +
+          ' arrives, they\'ll be overdue then. Looking ahead doesn\'t change anything.');
         ob.classList.add('carry-preview');
         var obList = el('ul', 'item-list');
         open.forEach(function (o) { obList.appendChild(renderOccurrence(o)); });
@@ -883,12 +926,17 @@
     var due = sectionBlock(title);
     if (before) {
       due.appendChild(el('p', 'empty', 'This week is before room schedules started, so there is nothing to tick here.'));
-    } else if (!occurrences.length) {
-      due.appendChild(el('p', 'empty', 'No scheduled chores in this room this week.'));
     } else {
-      var list = el('ul', 'item-list');
-      occurrences.forEach(function (o) { list.appendChild(renderOccurrence(o)); });
-      due.appendChild(list);
+      // Chores moved out of this week are listed too (labelled "Moved to …"),
+      // so they don't silently disappear. Each is still one occurrence.
+      var movedAway = S.movedOut(state, room.id, selectedWeek, t).filter(function (o) { return o.status !== 'done'; });
+      if (!occurrences.length && !movedAway.length) {
+        due.appendChild(el('p', 'empty', 'No scheduled chores in this room this week.'));
+      } else {
+        var list = el('ul', 'item-list');
+        occurrences.concat(movedAway).forEach(function (o) { list.appendChild(renderOccurrence(o)); });
+        due.appendChild(list);
+      }
     }
     content.appendChild(due);
 
@@ -970,10 +1018,13 @@
     if (load.stage === 'dryer' && load.dryCycles > 1) info += ' · drying cycle ' + load.dryCycles;
     if (load.stage === 'finished') info += ' ' + S.formatShort(load.finishedOn) + (load.putAway ? ' · put away' : ' · needs putting away');
     li.appendChild(el('p', 'load-info', info));
-    if (load.stage === 'finished' && !load.putAway && load.finishedOn < currentWeek()) {
-      li.className += ' load-overdue';
-      li.appendChild(el('p', 'badge status-overdue load-overdue-label', '⚠ Needs putting away · from the week of ' +
-        S.formatShort(S.weekStart(load.finishedOn)) + ' (finished ' + S.formatShort(load.finishedOn) + ')'));
+    if (load.stage === 'finished' && !load.putAway && load.finishedOn < laundryWeek()) {
+      if (load.finishedOn < currentWeek()) {
+        li.className += ' load-overdue';
+        li.appendChild(el('p', 'badge status-overdue load-overdue-label', '⚠ Overdue · put away (finished ' + S.formatShort(load.finishedOn) + ')'));
+      } else {
+        li.appendChild(el('p', 'badge status-upcoming load-overdue-label', 'Not put away yet (finished ' + S.formatShort(load.finishedOn) + ')'));
+      }
     }
 
     var actions = el('div', 'load-actions');
@@ -1065,7 +1116,7 @@
     });
     wrap.appendChild(board);
 
-    var late = W.overduePutAway(state.laundry, currentWeek());
+    var late = W.overduePutAway(state.laundry, laundryWeek());
     var finished = state.laundry.loads.filter(function (l) { return l.stage === 'finished' && late.indexOf(l) === -1; });
     var put = sectionBlock('Put away laundry', 'Finished loads waiting to be folded and put away. Putting away doesn\'t change whether a load is finished.');
     if (late.length) {
@@ -1464,6 +1515,8 @@
       var late = o.record.completedOn > S.weekEnd(o.effectiveWeek);
       text += ' — done ' + S.formatShort(o.record.completedOn) + (late ? ' (late)' : '');
     }
+    if (o.record && o.record.deferred && o.status !== 'done') text += ' — skipped for now';
+    if (o.record && o.record.movedTo && o.record.movedTo !== o.week) text += ' — moved to the week of ' + S.formatShort(o.record.movedTo);
     if (o.record && o.record.note) text += ' — note: "' + o.record.note + '"';
     return text;
   }
@@ -1494,7 +1547,7 @@
       var li = el('li', 'card history-item');
       var head = el('div', 'history-head');
       head.appendChild(el('span', '', S.formatShort(week) + ' – ' + S.formatShort(S.weekEnd(week))));
-      head.appendChild(el('span', '', h.done.length + ' done · ' + h.skipped.length + ' skipped · ' + h.missed.length + ' missed'));
+      head.appendChild(el('span', '', h.done.length + ' done · ' + h.missed.length + ' missed' + (h.skipped.length ? ' · ' + h.skipped.length + ' dismissed' : '')));
       li.appendChild(head);
       if (state.reviews[week]) li.appendChild(el('span', 'chip chip-reviewed', '✓ Reviewed ' + S.formatShort(state.reviews[week].updatedOn)));
       var total = h.done.length + h.missed.length;
@@ -1507,7 +1560,7 @@
           return e.name + ' (' + roomName(e.room) + ') — ' + S.formatShort(e.completedOn);
         })));
       }
-      if (h.skipped.length) details.appendChild(detailsList('Skipped', h.skipped.map(historyLine)));
+      if (h.skipped.length) details.appendChild(detailsList('Skipped (dismissed in an older version)', h.skipped.map(historyLine)));
       if (h.missed.length) details.appendChild(detailsList('Missed (still overdue)', h.missed.map(historyLine)));
       details.appendChild(el('p', 'history-group-title', 'Laundry loads finished: ' + laundry));
       li.appendChild(details);
@@ -1670,7 +1723,7 @@
     head.appendChild(el('span', 'review-item-name', o.task.name));
     var badges = el('span', 'badges');
     badges.appendChild(freqBadge(o.task.frequency));
-    if (o.status === 'overdue') badges.appendChild(el('span', 'badge status-overdue', 'Overdue from ' + S.formatShort(o.week)));
+    if (o.status === 'overdue') badges.appendChild(el('span', 'badge status-overdue', 'Overdue'));
     if (alreadyDone) badges.appendChild(el('span', 'badge status-done', '✓ Done ' + S.formatShort(o.record.completedOn) + ' via this review'));
     if (reviewRoom === 'all') badges.appendChild(el('span', 'badge', roomName(o.task.room)));
     head.appendChild(badges);
@@ -1982,9 +2035,14 @@
         expanded = expanded === d.task + '|' + d.week ? null : d.task + '|' + d.week;
         changed = false;
         break;
-      case 'skip':
-        S.toggleSkip(state, d.task, d.week);
-        expanded = null;
+      case 'skip-now':
+        S.setDeferred(state, d.task, d.week, true); // stays unfinished
+        break;
+      case 'undo-skip-now':
+        S.setDeferred(state, d.task, d.week, false); // also undoes a move made after skipping
+        break;
+      case 'undo-old-skip':
+        S.toggleSkip(state, d.task, d.week); // reopens an older "dismissed" skip
         break;
       case 'save-note':
         S.setNote(state, d.task, d.week, btn.parentNode.querySelector('.note-input').value);
@@ -1996,10 +2054,6 @@
         var select = btn.parentNode.querySelector('select');
         S.moveOccurrence(state, d.task, d.week, select.value, t);
         expanded = null;
-        break;
-      case 'skip-all':
-        if (!window.confirm('Skip every overdue chore in ' + roomName(openRoom) + '? They will be recorded as skipped, not done.')) return;
-        S.skipAllOverdue(state, openRoom, t);
         break;
       case 'asneeded-done':
         if (S.lastDone(state, d.task) === t) S.undoAsNeededToday(state, d.task, t);
