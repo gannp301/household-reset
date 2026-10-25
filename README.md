@@ -191,6 +191,8 @@ Open the **Laundry** room card.
 6. A load counts as **finished as soon as it's out of the dryer**, whether or not it's folded.
 7. **Put away laundry** lists finished loads still to be put away. Tap **Mark put away** on each one. This doesn't change its finished status. **Clear put-away loads** tidies the board; cleared loads are kept in History and backups.
 
+**Laundry status (no percentage bar):** laundry loads are a workflow, not scheduled chores, so the Laundry room card and the Laundry screen don't show a chore progress bar. Instead they show a short status, for example **1 load to put away · 1 waiting** or **Nothing needs putting away · 1 drying**. "Nothing needs putting away" only appears when no finished load is waiting to be put away, and loads still waiting, washing, or drying are always mentioned. If a load from an earlier cleaning week is still waiting, a compact **⚠ 1 load from an earlier week still to put away** reminder sits under the Laundry heading. Laundry is never part of the cleaning progress percentage. (Any chores you add to the Laundry room yourself are listed as "N of M chores done" in the status text.)
+
 **Put-away reminders from earlier weeks:** if a load finished in an earlier cleaning week still isn't put away, it's listed under **⚠ From earlier weeks** in **Put away laundry**, labelled with its week and finish date (for example, "from the week of Oct 24 (finished Oct 25)"). The Laundry room card also flags it. It's the same load, not a copy, so **Mark put away** clears the reminder straight away. It stays until you do. Loads still in the washer or dryer never count, and these reminders don't change room chore counts.
 
 **Browsing vs. the real date:** reminders follow the real date, not the week you're viewing.
