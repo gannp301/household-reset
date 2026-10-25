@@ -173,6 +173,135 @@
       expectEqual(L.cleanName('    '), '');
     });
 
+    // ---------- Backup & Restore ----------
+
+    // Builds a backup file's text from some state, like the Download button does.
+    function backupText(state, when) {
+      return JSON.stringify(L.createBackup(state, when || saturday));
+    }
+
+    // A small, realistic state with a finished chore and one past week.
+    function sampleState() {
+      var s = L.createDefaultState();
+      L.toggleChore(s.chores[0], L.weekKey(saturday));
+      L.toggleSupply(s.supplies[0]);
+      L.togglePetTask(s.pets[0], L.dayKey(saturday));
+      L.recordWeek(s, new Date(2026, 9, 14));
+      L.recordWeek(s, saturday);
+      return s;
+    }
+
+    test('backup file name includes the date', function () {
+      expectEqual(L.backupFileName(saturday), 'household-reset-backup-2026-10-24.json');
+    });
+
+    test('backup contains chores, history, supplies, and cat care', function () {
+      var backup = L.createBackup(sampleState(), saturday);
+      expectEqual(backup.app, 'household-reset');
+      expectEqual(backup.data.chores.length, 11);
+      expectEqual(backup.data.supplies.length, 10);
+      expectEqual(backup.data.pets.length, 7);
+      expectEqual(Object.keys(backup.data.history), ['2026-W42', '2026-W43']);
+    });
+
+    test('a backup restores exactly what was saved', function () {
+      var original = sampleState();
+      var result = L.validateBackup(backupText(original));
+      expectEqual(result.ok, true);
+      expectEqual(result.state, original);
+      expectEqual(result.summary, {
+        exportedAt: saturday.toISOString(), chores: 11, supplies: 10, pets: 7, weeks: 2
+      });
+    });
+
+    test('a backup of empty lists is still valid', function () {
+      var empty = { version: 1, chores: [], supplies: [], pets: [], history: {} };
+      expectEqual(L.validateBackup(backupText(empty)).ok, true);
+    });
+
+    test('empty, non-JSON, and too-large files are rejected', function () {
+      expectEqual(L.validateBackup('').ok, false);
+      expectEqual(L.validateBackup('   ').ok, false);
+      expectEqual(L.validateBackup('hello { not json').ok, false);
+      expectEqual(L.validateBackup('"' + new Array(2000002).join('x') + '"').ok, false);
+    });
+
+    test('JSON from some other app is rejected', function () {
+      expectEqual(L.validateBackup('{"name": "shopping list"}').ok, false);
+      expectEqual(L.validateBackup('[1, 2, 3]').ok, false);
+      expectEqual(L.validateBackup('null').ok, false);
+      // Raw saved data without the backup label is not accepted either.
+      expectEqual(L.validateBackup(JSON.stringify(sampleState())).ok, false);
+    });
+
+    test('a backup from a newer app version is rejected', function () {
+      var file = L.createBackup(sampleState(), saturday);
+      file.backupVersion = 99;
+      var result = L.validateBackup(JSON.stringify(file));
+      expectEqual(result.ok, false);
+      expectEqual(result.error.indexOf('newer') > -1, true);
+    });
+
+    test('damaged lists are rejected with a clear message', function () {
+      function broken(change) {
+        var file = L.createBackup(sampleState(), saturday);
+        change(file.data);
+        return L.validateBackup(JSON.stringify(file));
+      }
+      var cases = [
+        [function (d) { delete d.chores; }, 'chores'],
+        [function (d) { d.chores[0].name = '   '; }, 'chores'],
+        [function (d) { d.chores[0].recurring = 'yes'; }, 'chores'],
+        [function (d) { d.chores[1] = null; }, 'chores'],
+        [function (d) { d.supplies[0].done = 1; }, 'supplies'],
+        [function (d) { delete d.supplies[0].id; }, 'supplies'],
+        [function (d) { d.pets = 'cats'; }, 'cat-care'],
+        [function (d) { d.pets[0].doneDay = 5; }, 'cat-care'],
+        [function (d) { d.history = []; }, 'history'],
+        [function (d) { d.history['2026-W43'].done = 50; }, 'history'],
+        [function (d) { d.history['not a week'] = d.history['2026-W43']; }, 'history']
+      ];
+      cases.forEach(function (c, i) {
+        var result = broken(c[0]);
+        if (result.ok) throw new Error('case ' + i + ' should have been rejected');
+        if (result.error.indexOf(c[1]) === -1) throw new Error('case ' + i + ' gave: ' + result.error);
+      });
+    });
+
+    test('unknown extra fields are dropped and names are tidied on restore', function () {
+      var file = L.createBackup(sampleState(), saturday);
+      file.data.chores[0].sneaky = '<script>';
+      file.data.chores[0].name = '  Vacuum    floors ';
+      var chore = L.validateBackup(JSON.stringify(file)).state.chores[0];
+      expectEqual(Object.keys(chore).sort(), ['doneWeek', 'id', 'name', 'recurring']);
+      expectEqual(chore.name, 'Vacuum floors');
+    });
+
+    test('validating a backup never changes the original data', function () {
+      var original = sampleState();
+      var before = JSON.stringify(original);
+      var result = L.validateBackup(backupText(original));
+      result.state.chores.length = 0;
+      result.state.history['2026-W43'].completed.push('changed');
+      expectEqual(JSON.stringify(original), before);
+    });
+
+    test('recovery: a backup restored in a later week resets chores but keeps history', function () {
+      var restored = L.validateBackup(backupText(sampleState())).state;
+      L.rollover(restored, nextMonday); // what the app does right after restoring
+      expectEqual(L.weeklyProgress(restored.chores, L.weekKey(nextMonday)).done, 0);
+      expectEqual(restored.history['2026-W43'].completed, ['Vacuum floors']);
+      expectEqual(L.pastWeeks(restored, nextMonday).length, 2);
+      expectEqual(L.isPetTaskDone(restored.pets[0], L.dayKey(nextMonday)), false);
+      expectEqual(restored.supplies[0].done, true);
+    });
+
+    test('recovery: restored data survives being saved and loaded again', function () {
+      var restored = L.validateBackup(backupText(sampleState())).state;
+      var reloaded = L.parseState(JSON.stringify(restored));
+      expectEqual(reloaded, restored);
+    });
+
     // Show the results on the page.
     var list = document.getElementById('results');
     results.forEach(function (r) {
