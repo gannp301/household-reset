@@ -502,4 +502,55 @@
     expectEqual(W.overduePutAway(x.laundry, '2026-11-07').length, 1); // shown when viewing a future week
     expectEqual(x.load.putAway, false); // viewing changes nothing
   });
+
+  // ======================================================================
+  section('v1.3 Laundry room status');
+
+  test('status says how many loads to put away, and what is still moving', function () {
+    var x = bedding('2026-10-25');
+    expectEqual(W.statusLine(x.laundry), '1 load to put away');
+    var second = W.addLoad(x.laundry, 'regular', null, '2026-10-26');
+    finish(x.laundry, second.id, '2026-10-26');
+    W.addLoad(x.laundry, 'towels', null, '2026-10-26');
+    var washing = W.addLoad(x.laundry, 'regular', null, '2026-10-26');
+    W.moveLoad(x.laundry, washing.id, 'wash', '2026-10-26');
+    expectEqual(W.statusLine(x.laundry), '2 loads to put away · 1 waiting · 1 washing');
+  });
+
+  test('"Nothing needs putting away" only when nothing finished is waiting, and never hides loads in progress', function () {
+    var laundry = W.createLaundry();
+    expectEqual(W.statusLine(laundry), 'Nothing needs putting away');
+    var a = W.addLoad(laundry, 'regular', null, '2026-10-26');
+    W.moveLoad(laundry, a.id, 'wash', '2026-10-26'); W.moveLoad(laundry, a.id, 'dry', '2026-10-26');
+    expectEqual(W.statusLine(laundry), 'Nothing needs putting away · 1 drying');
+    W.moveLoad(laundry, a.id, 'finish', '2026-10-26');
+    expectEqual(W.statusLine(laundry), '1 load to put away');
+    W.togglePutAway(laundry, a.id, '2026-10-27');
+    expectEqual(W.statusLine(laundry), 'Nothing needs putting away');
+  });
+
+  test('status and reminders only read the loads: records, archive, and backup stay the same', function () {
+    var state = freshState();
+    var load = W.addLoad(state.laundry, 'bedding', null, '2026-10-25');
+    finish(state.laundry, load.id, '2026-10-25');
+    var before = canon(state);
+    W.statusLine(state.laundry);
+    W.overduePutAway(state.laundry, '2026-10-31');
+    W.overduePutAway(state.laundry, '2026-11-14'); // browsing ahead
+    W.overduePutAway(state.laundry, '2026-10-17'); // browsing back
+    expectEqual(canon(state), before);
+    var backup = H.createBackup(state, new Date());
+    expectSame(Object.keys(backup.data.laundry).sort(), ['archive', 'categories', 'loads']);
+    expectSame(Object.keys(backup.data.laundry.loads[0]).sort(), Object.keys(load).sort());
+  });
+
+  test('laundry loads never change the scheduled cleaning progress', function () {
+    var state = freshState();
+    var plain = S.overview(state, '2026-10-24', '2026-10-26');
+    var load = W.addLoad(state.laundry, 'bedding', null, '2026-10-25');
+    finish(state.laundry, load.id, '2026-10-25');
+    W.addLoad(state.laundry, 'regular', null, '2026-10-25');
+    expectSame(S.overview(state, '2026-10-24', '2026-10-26'), plain);
+    expectEqual(S.occurrencesForWeek(state, 'laundry', '2026-10-24', '2026-10-26').length, 0);
+  });
 })();
