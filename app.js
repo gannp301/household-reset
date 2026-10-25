@@ -55,7 +55,7 @@
     state = result.state;
     canSave = result.canSave;
     if (!canSave) showStorageWarning();
-    if (result.source === 'migrated') showUpgradeNotice(result);
+    if (result.source === 'migrated' || result.damagedCopy) showUpgradeNotice(result);
     save();
   }
 
@@ -76,6 +76,14 @@
   }
 
   function showUpgradeNotice(result) {
+    if (result.source !== 'migrated') {
+      // Damaged version 1.2 data and no version 1.1 data to fall back on.
+      document.getElementById('app-notice-text').textContent =
+        'Your saved data in this browser was damaged and could not be used, so the app started fresh. ' +
+        'A safety copy of the damaged data was kept. To get your lists back, use Restore from backup below.';
+      document.getElementById('app-notice').hidden = false;
+      return;
+    }
     var text = result.problem
       ? 'Welcome to version 1.2! Your version 1.1 data could not be read, so the app started fresh. ' +
         'The old data is still stored, untouched, in this browser.'
@@ -1193,9 +1201,13 @@
 
   function restoreSummary(s) {
     if (s.kind === 'v1') {
-      return 'This is a version 1.1 backup from ' + formatBackupDate(s.exportedAt) + '. It will be upgraded: ' +
-        count(s.supplies, 'supply', 'supplies') + ', ' + count(s.pets, 'cat-care task', 'cat-care tasks') + ', and ' +
-        count(s.legacyWeeks, 'week', 'weeks') + ' of old chore history will be restored. Room chores start fresh from this week.';
+      var a = s.added;
+      return 'This is a version 1.1 backup from ' + formatBackupDate(s.exportedAt) + '. Restoring it will:\n' +
+        '• Replace your Supplies with its ' + count(s.supplies, 'item', 'items') + ' and your Cats list with its ' +
+        count(s.pets, 'task', 'tasks') + '.\n' +
+        '• Add ' + count(a.weeks, 'week', 'weeks') + ' of old chore history and ' + count(a.chores, 'old chore', 'old chores') +
+        ' to History → Version 1.1 archive' + (a.keptWeeks ? ' (' + count(a.keptWeeks, 'week is', 'weeks are') + ' already there and stay as they are)' : '') + '.\n' +
+        '• Keep your room chores, schedules, completion history, and laundry loads exactly as they are.';
     }
     return 'This backup is from ' + formatBackupDate(s.exportedAt) + ' and has ' +
       count(s.tasks, 'room chore', 'room chores') + ', ' + count(s.completions, 'completion', 'completions') + ', ' +
@@ -1214,13 +1226,21 @@
 
     var reader = new FileReader();
     reader.onload = function () {
-      var result = H.validateBackup(String(reader.result), today());
+      var text = String(reader.result);
+      var result = H.validateBackup(text, today(), state);
       if (!result.ok) {
         setBackupStatus(result.error + ' Nothing was changed.', 'error');
         return;
       }
-      pendingRestore = result.state;
+      pendingRestore = text; // checked again, against the latest data, when you confirm
+      var merging = result.summary.kind === 'v1';
+      document.getElementById('restore-title').textContent = merging ? 'Restore this older backup?' : 'Replace your current data?';
       document.getElementById('restore-summary').textContent = restoreSummary(result.summary);
+      document.getElementById('restore-warning').textContent = merging
+        ? 'Your current Supplies and Cats lists will be replaced. To keep a copy of them, tap Cancel and download a backup first.'
+        : 'Restoring will replace everything currently saved in this browser, including laundry loads. ' +
+          'To keep a copy, tap Cancel and download a backup first.';
+      document.getElementById('confirm-restore').textContent = merging ? 'Restore older backup' : 'Replace my data';
       setBackupStatus('');
       document.getElementById('restore-confirm').hidden = false;
       document.getElementById('confirm-restore').focus();
@@ -1234,7 +1254,15 @@
   // Step 2 of restoring: only runs after tapping "Replace my data".
   function confirmRestore() {
     if (!pendingRestore) return;
-    state = pendingRestore;
+    // Check again against the data as it is right now, so nothing you
+    // changed while this box was open is lost.
+    var result = H.validateBackup(pendingRestore, today(), state);
+    if (!result.ok) {
+      hideRestoreConfirm();
+      setBackupStatus(result.error + ' Nothing was changed.', 'error');
+      return;
+    }
+    state = result.state;
     editing = null;
     editingTask = null;
     editingLoad = null;
