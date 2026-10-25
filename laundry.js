@@ -55,10 +55,12 @@
   }
 
   // Adds a load to a category. Names default to "Bedding 2", "Bedding 3"…
+  // Cleared (archived) loads count too, so a name is never reused.
   function addLoad(laundry, categoryId, name, today) {
     var exists = laundry.categories.some(function (c) { return c.id === categoryId; });
     if (!exists) return null;
-    var sameCategory = laundry.loads.filter(function (l) { return l.categoryId === categoryId; }).length;
+    var sameCategory = laundry.loads.concat(laundry.archive)
+      .filter(function (l) { return l.categoryId === categoryId; }).length;
     var load = {
       id: makeId(),
       categoryId: categoryId,
@@ -190,7 +192,16 @@
     return laundry.loads.filter(function (l) { return l.stage === 'finished' && !l.putAway; });
   }
 
-  // The numbers shown at the top of the Laundry room.
+  // How many loads were finished between two dates (inclusive), counting
+  // loads still on the board AND loads already cleared into the archive.
+  function finishedBetween(laundry, fromDay, toDay) {
+    return laundry.loads.concat(laundry.archive).filter(function (l) {
+      return l.finishedOn && l.finishedOn >= fromDay && l.finishedOn <= toDay;
+    }).length;
+  }
+
+  // The numbers shown at the top of the Laundry room. These describe the
+  // loads ON THE BOARD right now; cleared (archived) loads are not counted.
   function counts(laundry) {
     var c = { waiting: 0, washer: 0, dryer: 0, finished: 0 };
     laundry.loads.forEach(function (l) { c[l.stage]++; });
@@ -222,6 +233,7 @@
     deleteLoad: deleteLoad,
     clearPutAway: clearPutAway,
     loadsNeedingPutAway: loadsNeedingPutAway,
+    finishedBetween: finishedBetween,
     counts: counts
   };
 })(typeof window !== 'undefined' ? window : globalThis);
