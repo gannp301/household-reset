@@ -44,14 +44,14 @@ Every chore belongs to a room and has a **frequency**. Each frequency has its ow
 | ◐ **Monthly** | Muted blue | The week that starts on the **first Saturday of each month**. For example, Nov 7 2026, Dec 5 2026, Jan 2 2027. |
 | ◆ **Quarterly** | Warm taupe | The week that starts on the first Saturday of **January, April, July, and October**. |
 | ○ **As needed** | Neutral grey | Never scheduled and never overdue. Tap it whenever you do it, and the app remembers when it was last done. |
-| ⚠ **Overdue** | Amber | A scheduled chore from an earlier week that hasn't been done or skipped. |
+| ⚠ **Overdue** | Amber | A scheduled chore whose week has ended and that still isn't done (including chores you chose **Skip for now** on). |
 
 Chores that share a frequency are always due together. For example, **Deep clean shower/tub** and **Wash shower curtains** are both monthly, so they always land in the same week.
 
 **Inside a room you can:**
 
 - **Tick a chore** with the big round button. Tap it again to undo.
-- Tap **More** on a chore to **skip** it for that week or **move** it to a later week (this is "rescheduling" one occurrence).
+- Tap **More** on a chore for **Edit chore** and **Skip for now**. After you skip, the same panel offers an optional reason or note, **Add needed supply**, **Move to another cleaning week**, and **Undo Skip** (see *Skip for now* below).
 - **Add a chore** with a name and a frequency.
 - **Edit or delete** chores under **All chores in this room**. Deleting asks first, and past completions stay in History.
 
@@ -66,17 +66,29 @@ Changing how often a chore repeats starts its new schedule from the current week
 
 ## How overdue chores work
 
-- If a scheduled chore isn't done by Friday night, it **carries over automatically** and becomes **overdue**. It appears in its room under **Overdue (carried over)**, labelled **Overdue from Oct 24** (its original due week). No button is needed for this.
+- If a scheduled chore isn't done by Friday night, it **carries over automatically** and becomes **overdue**. It appears in its room under **Overdue**, with a simple **⚠ Overdue** label. The original due week is still saved and shown in History. No button is needed for this.
 - The chore's next regular occurrence is still scheduled as normal. For example, an every-2-weeks mirror left from Oct 24 is overdue during Oct 31–Nov 6, and the next mirror is still due Nov 7–13. Finishing the overdue one doesn't tick the new one.
-- **Looking ahead:** if you browse to a future week, chores that are still open now are shown under **Still open from earlier weeks**, labelled **Open from Oct 24 · overdue after Oct 30**. Browsing never makes anything overdue early.
-- A missed chore **stays overdue** until you tick it or skip it. A new week's copy of the same chore doesn't replace or hide it.
+- **Looking ahead:** if you browse to a future week, chores that are still open now are shown under **Still open now**, labelled **Due this week** (they aren't overdue yet in real life). Browsing never makes anything overdue early.
+- A missed chore **stays overdue** until you tick it. A new week's copy of the same chore doesn't replace or hide it.
 - If you miss several weeks, each missed week is listed **once**. Nothing piles up twice.
 - Ticking an overdue chore saves **today's date** as the real completion date and keeps the original due week, so History shows it as done late.
 - Doing a chore late **doesn't shift its schedule**. An every-2-weeks chore stays on its rotation.
-- Back from a trip? **Skip all overdue in this room** clears a room in one tap, after asking first. Skipped chores are recorded as skipped, not done.
 - **As-needed** chores are never overdue.
 - Overdue chores also appear at the top of **Heads up** (see below).
 - Reminders appear **inside the app only**. Household Reset can't send phone notifications.
+
+## Skip for now
+
+**Skip for now** means "not this week, but don't forget it".
+
+- The chore stays **unfinished**. Its label says **Skipped for now**, and it still counts as unfinished in the room's progress.
+- If the week ends and it still isn't done, it becomes **⚠ Overdue** and shows in the room's **Overdue** list, like any other missed chore.
+- It keeps its **original scheduled week**. The next regular occurrence is a separate chore with its own tick, note, and skip. Doing the skipped one late never ticks the next one, and nothing is ever duplicated.
+- **Undo Skip** puts it back exactly as it was before (it also cancels a move).
+- **Move to another cleaning week** (shown after you skip) makes it due in that week instead. Its original week shows **Moved to Nov 7**. It only becomes overdue if *that* week passes. If the new week also has its own regular occurrence, both are listed separately, and ticking one leaves the other open.
+- The optional **reason or note**, **Add needed supply**, and the move all belong to that one week's occurrence. A new occurrence starts with an empty note; older notes stay in History.
+
+**Skips from older versions:** before version 1.3, "Skip" dismissed a chore for good. Those records are kept exactly as they were and are never rewritten. They're labelled **Skipped (dismissed)**, aren't overdue, and History lists them under **Skipped (dismissed in an older version)**. If you want one back, open **More** and tap **Undo skip (reopen)**; it then follows the normal overdue rules.
 
 ## Heads up
 
@@ -86,14 +98,14 @@ It shows **at most three short rows**, most important first:
 
 | Row | When viewing this week | When viewing another week |
 |-----|------------------------|---------------------------|
-| ⚠ **Overdue from Oct 24** (amber) | Missed chores from earlier weeks | Past week: that week's chores still not done. Future week: not shown. |
+| ⚠ **Overdue** (amber) | Missed chores from earlier weeks | Past week: that week's chores still not done. Future week: not shown. |
 | ★ **Due Oct 31–Nov 6** | Every-2-weeks, monthly, and quarterly chores due this week | The same, for the week shown |
 | ◷ **Coming next week: Nov 7–13** | Monthly and quarterly chores due next week | "Coming the week after", for the week after the one shown |
 
 The line under the title says exactly what's summarized, for example **Summarizing Oct 31–Nov 6 · today's week**. When you browse, it says **a past week you're viewing (not today's week)** or **a future week you're viewing (not today's week)**. Expanded overdue details also show any note you left on a chore.
 
 - Ordinary weekly chores aren't repeated here. They're already in each room. They only appear if they're overdue.
-- Tap a row (or press Enter on it) to **Show details**: each chore's name, room, and frequency.
+- Tap a row (or press Enter on it) to **Show details**. Inside, chores are grouped **by room**, and each room shows its count, for example **🛁 Bathroom 5**. Only rooms with something to show are listed. Tap a room to open it; several rooms can be open at once. Each chore shows its name, frequency, and a short label (**Overdue** or **Moved to Nov 7**).
 - A chore is only ever listed under the week it actually belongs to.
 - When nothing needs attention, it just says **All clear**.
 
@@ -180,6 +192,15 @@ Open the **Laundry** room card.
 7. **Put away laundry** lists finished loads still to be put away. Tap **Mark put away** on each one. This doesn't change its finished status. **Clear put-away loads** tidies the board; cleared loads are kept in History and backups.
 
 **Put-away reminders from earlier weeks:** if a load finished in an earlier cleaning week still isn't put away, it's listed under **⚠ From earlier weeks** in **Put away laundry**, labelled with its week and finish date (for example, "from the week of Oct 24 (finished Oct 25)"). The Laundry room card also flags it. It's the same load, not a copy, so **Mark put away** clears the reminder straight away. It stays until you do. Loads still in the washer or dryer never count, and these reminders don't change room chore counts.
+
+**Browsing vs. the real date:** reminders follow the real date, not the week you're viewing.
+
+| What you're doing | What Laundry and the room card show |
+|-------------------|-------------------------------------|
+| Viewing this week | Loads finished in an earlier week and not put away: **⚠ Overdue · put away (finished Oct 25)**. A load finished this week isn't overdue yet. |
+| Viewing a past week | The same real, current reminders. Looking back never hides or adds any. |
+| Viewing a future week | Also lists loads that *would still be waiting* then, labelled **Not put away yet (finished Oct 25)**, not Overdue. Browsing saves nothing. |
+| A new week actually starts (the date moves on) | Any load finished in an earlier week becomes **⚠ Overdue** and the Laundry room card flags it, one week late or several, listed once. |
 
 The counters at the top describe the loads **on the board right now**: **waiting**, **started** (in the washer, dryer, or finished), **moved to the dryer** (in the dryer or finished), **finished**, and **still to put away**. When you clear put-away loads, they leave the board, so these counters go down. Below them, **Finished this cleaning week** counts every load finished since Saturday, *including* loads you've already cleared, so that number never drops when you tidy up.
 
