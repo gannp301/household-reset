@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#fbf6ef">
-  <meta name="description" content="Household Reset: a cozy weekly chore, supplies, and cat-care checklist.">
+  <meta name="description" content="Household Reset: a cozy room-by-room cleaning calendar, laundry tracker, supplies list, and cat-care checklist.">
   <title>Household Reset</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏡</text></svg>">
   <link rel="stylesheet" href="styles.css">
@@ -16,38 +16,75 @@
   </header>
 
   <nav class="tabs" aria-label="Sections">
-    <button class="tab" type="button" data-tab="chores" aria-selected="true">Chores</button>
+    <button class="tab" type="button" data-tab="rooms" aria-selected="true">Rooms</button>
     <button class="tab" type="button" data-tab="supplies" aria-selected="false">Supplies</button>
     <button class="tab" type="button" data-tab="pets" aria-selected="false">Cats</button>
     <button class="tab" type="button" data-tab="history" aria-selected="false">History</button>
   </nav>
 
   <main>
-    <!-- Weekly chores -->
-    <section class="panel" id="panel-chores" data-panel="chores">
-      <div class="card progress-card">
-        <div class="progress-text">
-          <h2>This week</h2>
-          <span id="progress-count">0 of 0 done</span>
+    <!-- Rooms: week navigator, overview, room cards -->
+    <section class="panel" id="panel-rooms" data-panel="rooms">
+      <div class="notice" id="app-notice" role="status" hidden>
+        <p id="app-notice-text"></p>
+        <button type="button" class="btn btn-quiet" id="app-notice-close">Got it</button>
+      </div>
+
+      <div class="card week-card">
+        <div class="week-nav">
+          <button type="button" class="btn btn-quiet nav-btn" id="prev-week" aria-label="Previous week">‹</button>
+          <div class="week-title">
+            <span class="eyebrow" id="week-eyebrow">This cleaning week</span>
+            <strong id="week-range"></strong>
+          </div>
+          <button type="button" class="btn btn-quiet nav-btn" id="next-week" aria-label="Next week">›</button>
         </div>
-        <div class="progress-track" role="progressbar" aria-label="Weekly chores completed"
+        <button type="button" class="btn btn-quiet this-week-btn" id="this-week" hidden>↩ Back to this week</button>
+        <div class="stats" id="overview-stats"></div>
+        <div class="progress-track" role="progressbar" aria-label="Chores completed in the selected week"
              aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar">
           <div class="progress-fill" id="progress-fill"></div>
         </div>
-        <p class="hint">Weekly chores uncheck themselves every Monday. Past weeks are saved in History.</p>
+        <p class="hint" id="week-note">Cleaning weeks run Saturday to Friday.</p>
       </div>
 
-      <form class="add-form" data-list="chores">
-        <label class="visually-hidden" for="add-chore">New chore</label>
-        <input id="add-chore" name="name" type="text" placeholder="Add a chore…" autocomplete="off" maxlength="80">
-        <label class="toggle">
-          <input type="checkbox" name="recurring" checked>
-          Repeats weekly
-        </label>
-        <button type="submit" class="btn btn-primary">Add</button>
-      </form>
+      <!-- The list of rooms (the "home" of this tab) -->
+      <div id="rooms-home">
+        <div class="card" id="reminders-card">
+          <h2>Reminders</h2>
+          <div id="reminders"></div>
+        </div>
 
-      <ul class="item-list" id="list-chores"></ul>
+        <h2 class="section-title">Rooms</h2>
+        <div class="room-grid" id="room-grid"></div>
+
+        <div class="card">
+          <h2>Upcoming</h2>
+          <p class="hint">Less-frequent chores and the week they're next due.</p>
+          <ul class="upcoming-list" id="upcoming-list"></ul>
+        </div>
+
+        <div class="card legend">
+          <h2>Colour key</h2>
+          <ul class="legend-list" id="legend-list"></ul>
+        </div>
+      </div>
+
+      <!-- One room's checklist (shown after tapping a room card) -->
+      <div id="room-view" hidden>
+        <button type="button" class="btn btn-quiet back-btn" id="back-to-rooms">‹ All rooms</button>
+        <div class="card room-header">
+          <div class="progress-text">
+            <h2 id="room-title"></h2>
+            <span id="room-progress-text"></span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-label="Room chores completed"
+               aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="room-progress-bar">
+            <div class="progress-fill" id="room-progress-fill"></div>
+          </div>
+        </div>
+        <div id="room-content"></div>
+      </div>
     </section>
 
     <!-- Household supplies -->
@@ -86,10 +123,18 @@
     <!-- Past weeks -->
     <section class="panel" id="panel-history" data-panel="history" hidden>
       <div class="card">
-        <h2>Past weeks</h2>
-        <p class="hint">A record of how each earlier week went.</p>
+        <h2>Cleaning history</h2>
+        <p class="hint">Each past cleaning week: what was done (and when), skipped, or missed.</p>
       </div>
       <ul class="history-list" id="list-history"></ul>
+
+      <div id="legacy-section" hidden>
+        <div class="card">
+          <h2>Version 1.1 archive</h2>
+          <p class="hint" id="legacy-note">Your weekly scores and chore list from before rooms were added. Kept for reference; nothing here is active.</p>
+        </div>
+        <ul class="history-list" id="legacy-history"></ul>
+      </div>
     </section>
   </main>
 
@@ -98,7 +143,7 @@
     <div class="card backup-card">
       <h2 id="backup-title">Backup &amp; Restore</h2>
       <p class="hint">
-        Save a copy of all your chores, weekly history, supplies, and cat-care lists as a file.
+        Save a copy of everything — room chores and schedules, completion history, laundry loads, supplies, cat care, and your version 1.1 archive — as a file.
         Use it to recover your lists, or to move them to another device.
       </p>
 
@@ -134,6 +179,9 @@
   </footer>
 
   <script src="logic.js"></script>
+  <script src="schedule.js"></script>
+  <script src="laundry.js"></script>
+  <script src="storage.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
