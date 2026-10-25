@@ -150,7 +150,9 @@
   // capitals and spaces) as needed. Only called after an explicit tap.
   // Returns { action: 'added' | 'marked' | 'already', id, name, wasDone }, or
   // null for a blank name. 'already' means it was already needed (no change).
-  function addOrMarkSupply(state, name) {
+  // `categoryId` (optional, version 1.3) puts a NEW supply in that category;
+  // otherwise it shows in "Other". Existing supplies keep their category.
+  function addOrMarkSupply(state, name, categoryId) {
     var clean = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
     if (!clean) return null;
     var existing = findSupply(state, clean);
@@ -162,6 +164,10 @@
       return { action: 'marked', id: existing.id, name: existing.name, wasDone: true };
     }
     var item = L.createSupply(clean);
+    var categories = state.supplyCategories || [];
+    if (categoryId && categoryId !== 'other' && categories.some(function (c) { return c.id === categoryId; })) {
+      item.category = categoryId;
+    }
     state.supplies.push(item);
     return { action: 'added', id: item.id, name: item.name, wasDone: false };
   }
