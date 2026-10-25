@@ -2,6 +2,15 @@
 
 A cozy, mobile-friendly home management app: a room-by-room cleaning calendar, a laundry load tracker, a household supplies list, and a daily cat-care checklist. It's a plain website made of HTML, CSS, and JavaScript. It doesn't use frameworks, accounts, a database, or paid services.
 
+## What's new in version 1.3
+
+- **Supplies in collapsible categories:** Cleaning, Hair Care, Body Care, Laundry, Cat, Personal Care, and Other, plus your own. Each category header shows how many items it holds and how many are needed.
+- **Notes on supplies:** for example, a preferred brand, scent, or who it's for.
+- **Room chore lists in collapsible groups** by frequency (Weekly, Every 2 weeks, Monthly, Quarterly, As needed).
+- **Edit chore** straight from the weekly checklist (**More → Edit chore**).
+- **Laundry put-away reminders carry over:** a load finished in an earlier week and not put away is flagged until you put it away.
+- Supplies are still simple: **ticked = stocked, unticked = needed**. There are no quantities or stock levels.
+
 ## What's new in version 1.2
 
 - **Rooms instead of one long list.** Seven rooms (Bathroom, Kitchen, Living Room, Bedroom, Laundry, Cat Litter Room, Whole House), each with its own checklist and progress bar.
@@ -19,7 +28,7 @@ A cozy, mobile-friendly home management app: a room-by-room cleaning calendar, a
 | Tab | What it does |
 |-----|--------------|
 | **Rooms** | The cleaning calendar. Shows the week, totals (due, completed, overdue, next week), **Heads up**, a card for each room, and **Get ready for next week**. Tap a room card to open its checklist. |
-| **Supplies** | Household supplies checklist (unchanged). Tick items when stocked, and use **Untick all supplies** before a shopping trip. |
+| **Supplies** | Household supplies in collapsible categories, each with an optional note. Tick items when stocked, untick when needed, and use **Untick all supplies** before a shopping trip. |
 | **Cats** | Daily care checklist for two cats (unchanged). It unchecks itself each morning. |
 | **History** | Each past cleaning week: what was done (and on what date), skipped, or missed, plus laundry loads finished. Below that is the **Version 1.1 archive** with your old weekly scores. |
 | **Backup & Restore** | Shown under every tab. Download all your data as a dated `.json` file, and restore it later. |
@@ -88,6 +97,23 @@ The line under the title says exactly what's summarized, for example **Summarizi
 - A chore is only ever listed under the week it actually belongs to.
 - When nothing needs attention, it just says **All clear**.
 
+## Supplies: categories and notes (version 1.3)
+
+- **Categories:** tap a category header to open or close it. Several can be open at once, and each header shows "3 items · 1 needed". Categories with nothing in them start closed.
+- **Adding:** type a name, pick a category, and tap **Add**. If the item is already on your list (capitals and spaces don't matter), it isn't added again. If it's ticked, you're offered **Mark as needed**.
+- **Edit** a supply to rename it, add or change its **note**, or move it to another category. Moving keeps the same item, with the same tick and note, so nothing is duplicated.
+- **Notes** (like "Brand X, for curly hair") stay when you tick or untick the item. To remove one, clear it in Edit.
+- **Your own categories:** add one at the bottom of the tab. Each category has **Rename**, **↑ / ↓** to reorder it, and **Delete**. Deleting moves its supplies to **Other**; nothing is deleted. **Other** always stays last and can't be deleted.
+- **Existing supplies** start in **Other**. The app never guesses a category from a name; you move items yourself.
+- **Renaming a supply** also updates any chore that lists it (for example, "Glass cleaner" → "Window spray" on both mirror chores), and the app tells you so. Moving a supply doesn't affect chores at all.
+- **Add needed supply** (from a chore or during a week review) can put a new item straight into a category. It goes in **Other** if you don't choose one.
+
+## Rooms: chore groups and editing (version 1.3)
+
+- **All chores in this room** is now grouped by frequency. Tap a group to open it; several can be open at once. Each group shows its chore count and colour, and keeps **Edit** and **Delete** inside it. Empty groups aren't shown.
+- **Edit chore** is also in each chore's **More** panel in the weekly checklist. It opens the same form (name, frequency, supplies) right there. **Save Changes** saves and **Cancel** leaves everything as it was. Changing how often a chore repeats asks you to confirm first, and the new schedule starts this week, as before.
+- Renaming keeps the same chore (and its history). History shows the name a chore had when it was done, for example **Wipe sink and counter (now "Wipe sink")**.
+
 ## Notes on chores
 
 You can leave a short note on one occurrence of a chore, for example "I didn't have trash bags". Tap **More** on the chore and use **Add note**, or add it while finishing the week.
@@ -152,6 +178,8 @@ Open the **Laundry** room card.
 5. Made a mistake? **Back a step** moves a load backwards. **Rename** and **Delete** are there too.
 6. A load counts as **finished as soon as it's out of the dryer**, whether or not it's folded.
 7. **Put away laundry** lists finished loads still to be put away. Tap **Mark put away** on each one. This doesn't change its finished status. **Clear put-away loads** tidies the board; cleared loads are kept in History and backups.
+
+**Put-away reminders from earlier weeks:** if a load finished in an earlier cleaning week still isn't put away, it's listed under **⚠ From earlier weeks** in **Put away laundry**, labelled with its week and finish date (for example, "from the week of Oct 24 (finished Oct 25)"). The Laundry room card also flags it. It's the same load, not a copy, so **Mark put away** clears the reminder straight away. It stays until you do. Loads still in the washer or dryer never count, and these reminders don't change room chore counts.
 
 The counters at the top describe the loads **on the board right now**: **waiting**, **started** (in the washer, dryer, or finished), **moved to the dryer** (in the dryer or finished), **finished**, and **still to put away**. When you clear put-away loads, they leave the board, so these counters go down. Below them, **Finished this cleaning week** counts every load finished since Saturday, *including* loads you've already cleared, so that number never drops when you tidy up.
 
@@ -251,11 +279,13 @@ To move your lists to your phone, make a backup on the iPad, open the file on th
 | `laundry.js` | **Laundry rules** *(new)*: the four steps, one washer and one dryer, extra drying, and put-away tracking. |
 | `storage.js` | **Saving and safety** *(new)*: the version 1.2 data format, the one-time upgrade from 1.1, loading and saving, and checking backups before restoring. |
 | `review.js` | **Finish Cleaning Week** *(new)*: the review screen's counts, the Carry Over / Done choices, notes, and supplies, applied only when you confirm. |
+| `supplies.js` | **Supply categories and notes** *(new in 1.3)*: categories (add, rename, reorder, delete), moving supplies, notes, and renaming with chore links kept. |
 | `prep.js` | **Next-week prep** *(new)*: finds next week's chores that need supplies, and handles **I'm stocked**, **Add to supplies**, and undo without duplicates. |
 | `logic.js` | **Supplies and cat-care rules**, plus the version 1.1 backup checker (unchanged from version 1.1). |
 | `app.js` | The **wiring**: draws every screen, responds to taps, and saves changes. |
 | `tests.html` | The **self-check page**: runs every automatic test and lists the manual checks. |
-| `tests-v1-2.js` | The **version 1.2 tests** *(new)*, loaded by `tests.html`. |
+| `tests-v1-2.js` | The **version 1.2 tests**, loaded by `tests.html`. |
+| `tests-v1-3.js` | The **version 1.3 tests** *(new)*, loaded by `tests.html`. |
 | `README.md` | This guide. |
 
 ## New programming ideas in version 1.2
