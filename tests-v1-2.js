@@ -1465,7 +1465,7 @@
     S.editTask(state, task.id, 'Descale kettle', 'monthly', null, ACTIVATED); // supplies not given: kept
     expectEqual(S.findTask(state, task.id).supplies, ['Descaler']);
     S.editTask(state, task.id, 'Descale kettle', 'monthly', null, ACTIVATED, '');
-    expectEqual(S.findTask(state, task.id).supplies, undefined);
+    expectEqual(S.findTask(state, task.id).supplies, []); // cleared on purpose: kept as an empty list
   });
 
   test('prep answers and chore supplies are included in a 1.2 backup', function () {
@@ -1510,5 +1510,314 @@
     P.answerStocked(preview, promptFor(preview, '2026-11-02', 'bathroom-clean-mirror'), '2026-11-02');
     var result = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-11-03', preview);
     expectSame(result.state.prep, preview.prep);
+  });
+
+  // ======================================================================
+  section('Final QC: overdue carryover');
+
+  var R = window.HouseholdReview;
+  var MIRROR = 'bathroom-clean-mirror';
+
+  function weeksOf(list, taskId) {
+    return list.filter(function (o) { return o.task.id === taskId; }).map(function (o) { return o.week; });
+  }
+
+  test('the mirror example: overdue from Oct 24 during Oct 31–Nov 6, Nov 7 still scheduled', function () {
+    var state = freshState();
+    expectEqual(weeksOf(S.overdueOccurrences(state, 'bathroom', '2026-11-02'), MIRROR), ['2026-10-24']);
+    var nov7 = S.occurrencesForWeek(state, 'bathroom', '2026-11-07', '2026-11-02').filter(function (o) { return o.task.id === MIRROR; });
+    expectEqual(nov7.length, 1);
+    expectEqual(nov7[0].week, '2026-11-07');
+  });
+
+  test('finishing the overdue occurrence records the real date and leaves Nov 7 open', function () {
+    var state = freshState();
+    S.toggleDone(state, MIRROR, '2026-10-24', '2026-11-03');
+    expectEqual(S.getRecord(state, MIRROR, '2026-10-24').completedOn, '2026-11-03');
+    expectEqual(weeksOf(S.overdueOccurrences(state, 'bathroom', '2026-11-03'), MIRROR), []);
+    var nov7 = S.occurrencesForWeek(state, 'bathroom', '2026-11-07', '2026-11-03').filter(function (o) { return o.task.id === MIRROR; })[0];
+    expectEqual(nov7.status, 'upcoming');
+    expectEqual(S.getRecord(state, MIRROR, '2026-11-07'), null);
+  });
+
+  test('browsing a future week shows still-open chores without making them overdue', function () {
+    var state = freshState();
+    var before = canon(state);
+    var preview = S.openBefore(state, 'bathroom', '2026-10-31', ACTIVATED);
+    var mirror = preview.filter(function (o) { return o.task.id === MIRROR; })[0];
+    expectEqual(mirror.week, '2026-10-24');
+    expectEqual(mirror.status, 'due'); // not overdue yet
+    expectEqual(weeksOf(S.openBefore(state, 'bathroom', '2026-11-07', ACTIVATED), MIRROR), ['2026-10-24']);
+    expectEqual(S.overdueOccurrences(state, null, ACTIVATED).length, 0);
+    expectEqual(S.openBefore(state, 'bathroom', '2026-10-24', ACTIVATED).length, 0); // today's week: nothing to preview
+    expectEqual(canon(state), before);
+  });
+
+  test('weekly, biweekly, monthly, and quarterly chores each carry over once', function () {
+    var state = H.createState('2026-10-03', null); // activated in a first-Saturday week
+    var overdue = S.overdueOccurrences(state, null, '2026-10-12');
+    expectEqual(weeksOf(overdue, 'bathroom-clean-toilet'), ['2026-10-03']);
+    expectEqual(weeksOf(overdue, MIRROR), []); // its first due week is Oct 10 (this week)
+    expectEqual(weeksOf(overdue, 'bathroom-deep-clean-shower-tub'), ['2026-10-03']);
+    expectEqual(weeksOf(overdue, 'kitchen-clean-oven'), ['2026-10-03']);
+    var later = S.overdueOccurrences(state, null, '2026-10-19');
+    expectEqual(weeksOf(later, MIRROR), ['2026-10-10']);
+    expectEqual(weeksOf(later, 'bathroom-deep-clean-shower-tub'), ['2026-10-03']);
+    expectEqual(S.isDueInWeek(S.findTask(state, 'bathroom-deep-clean-shower-tub'), '2026-11-07'), true); // rotation unchanged
+  });
+
+  test('carried-over lists never contain duplicates', function () {
+    var state = freshState();
+    S.moveOccurrence(state, MIRROR, '2026-10-24', '2026-10-31', '2026-10-26');
+    [['2026-11-02', null], ['2026-11-16', null]].forEach(function (c) {
+      var keys = S.overdueOccurrences(state, c[1], c[0]).map(function (o) { return o.task.id + '|' + o.week; });
+      expectEqual(keys.length, keys.filter(function (k, i) { return keys.indexOf(k) === i; }).length);
+    });
+    var preview = S.openBefore(state, null, '2026-11-14', '2026-11-02').map(function (o) { return o.task.id + '|' + o.week; });
+    expectEqual(preview.length, preview.filter(function (k, i) { return preview.indexOf(k) === i; }).length);
+  });
+
+  test('short week labels work across months and years', function () {
+    expectEqual(S.formatRangeShort('2026-10-24'), 'Oct 24–30');
+    expectEqual(S.formatRangeShort('2026-10-31'), 'Oct 31–Nov 6');
+    expectEqual(S.formatRangeShort('2026-12-26'), 'Dec 26–Jan 1');
+  });
+
+  // ======================================================================
+  section('Final QC: occurrence notes');
+
+  test('a note is saved on the occurrence, not the chore', function () {
+    var state = freshState();
+    S.setNote(state, 'bathroom-change-bathroom-trash', '2026-10-24', '  I didn\'t   have trash bags ');
+    expectEqual(S.getRecord(state, 'bathroom-change-bathroom-trash', '2026-10-24').note, 'I didn\'t have trash bags');
+    expectEqual(S.findTask(state, 'bathroom-change-bathroom-trash').note, undefined);
+    expectEqual(S.getRecord(state, 'bathroom-change-bathroom-trash', '2026-11-07'), null);
+  });
+
+  test('the note shows in Heads up overdue details', function () {
+    var state = freshState();
+    S.setNote(state, 'bathroom-change-bathroom-trash', '2026-10-24', 'No bags');
+    var overdue = S.headsUp(state, '2026-10-31', '2026-11-02').groups[0];
+    var item = overdue.items.filter(function (i) { return i.task.id === 'bathroom-change-bathroom-trash'; })[0];
+    expectEqual(item.note, 'No bags');
+  });
+
+  test('the note stays in History after the chore is finished', function () {
+    var state = freshState();
+    S.setNote(state, 'bathroom-change-bathroom-trash', '2026-10-24', 'No bags');
+    S.toggleDone(state, 'bathroom-change-bathroom-trash', '2026-10-24', '2026-11-03');
+    var done = S.weekHistory(state, '2026-10-24', '2026-11-03').done.filter(function (o) { return o.task.id === 'bathroom-change-bathroom-trash'; })[0];
+    expectEqual(done.record.note, 'No bags');
+    expectEqual(done.record.completedOn, '2026-11-03');
+  });
+
+  test('notes can be edited and cleared without changing completion', function () {
+    var state = freshState();
+    S.setNote(state, MIRROR, '2026-10-24', 'First');
+    S.setNote(state, MIRROR, '2026-10-24', 'Second');
+    expectEqual(S.getRecord(state, MIRROR, '2026-10-24').note, 'Second');
+    S.setNote(state, MIRROR, '2026-10-24', '');
+    expectEqual(S.getRecord(state, MIRROR, '2026-10-24'), null); // nothing left to keep
+    S.toggleDone(state, MIRROR, '2026-10-24', '2026-10-26');
+    S.setNote(state, MIRROR, '2026-10-24', 'x');
+    S.setNote(state, MIRROR, '2026-10-24', '');
+    expectEqual(S.getRecord(state, MIRROR, '2026-10-24').status, 'done');
+  });
+
+  // ======================================================================
+  section('Final QC: Finish Cleaning Week');
+
+  function reviewState() {
+    var state = freshState();
+    S.toggleDone(state, 'bathroom-clean-toilet', '2026-10-24', '2026-10-26'); // ticked normally
+    return state;
+  }
+
+  function draftWith(state, week, today, choices) {
+    var draft = R.createDraft(state, week, today);
+    Object.keys(choices).forEach(function (key) {
+      Object.keys(choices[key]).forEach(function (field) { draft.items[key][field] = choices[key][field]; });
+    });
+    return draft;
+  }
+
+  test('available for this week and past weeks, not future weeks', function () {
+    var state = freshState();
+    expectEqual(R.canReview(state, '2026-10-24', ACTIVATED), true);
+    expectEqual(R.canReview(state, '2026-10-24', '2026-11-02'), true);
+    expectEqual(R.canReview(state, '2026-10-31', ACTIVATED), false);
+    expectEqual(R.canReview(state, '2026-10-17', ACTIVATED), false); // before schedules started
+  });
+
+  test('shows scheduled, completed, and unfinished counts; ticked chores stay completed', function () {
+    var data = R.reviewData(reviewState(), '2026-10-24', '2026-10-30');
+    expectEqual(data.scheduled, 25);
+    expectEqual(data.completed, 1);
+    expectEqual(data.unfinished, 24);
+    expectEqual(data.items.some(function (o) { return o.task.id === 'bathroom-clean-toilet'; }), false);
+  });
+
+  test('every unfinished chore defaults to Carry Over, and has only two choices', function () {
+    var draft = R.createDraft(reviewState(), '2026-10-24', '2026-10-30');
+    var decisions = Object.keys(draft.items).map(function (k) { return draft.items[k].decision; });
+    expectEqual(decisions.length, 24);
+    expectTrue(decisions.every(function (d) { return d === 'carry'; }), 'default carry');
+  });
+
+  test('carrying everything over saves the review and changes no chore', function () {
+    var state = reviewState();
+    var before = canon(state.records);
+    var counts = R.applyReview(state, R.createDraft(state, '2026-10-24', '2026-10-30'), '2026-10-30');
+    expectSame(counts, { done: 0, carried: 24, notes: 0, supplies: 0 });
+    expectEqual(canon(state.records), before);
+    expectEqual(state.reviews['2026-10-24'].reviewedOn, '2026-10-30');
+    expectEqual(weeksOf(S.overdueOccurrences(state, 'bathroom', '2026-11-02'), MIRROR), ['2026-10-24']);
+    expectEqual(weeksOf(S.overdueOccurrences(state, 'bathroom', '2026-11-02'), 'bathroom-change-bathroom-trash'), ['2026-10-24']);
+  });
+
+  test('Done marks the occurrence complete today and leaves the schedule alone', function () {
+    var state = reviewState();
+    R.applyReview(state, draftWith(state, '2026-10-24', '2026-11-01', { 'bathroom-clean-mirror|2026-10-24': { decision: 'done' } }), '2026-11-01');
+    expectEqual(S.getRecord(state, MIRROR, '2026-10-24').completedOn, '2026-11-01');
+    expectEqual(weeksOf(S.overdueOccurrences(state, 'bathroom', '2026-11-02'), MIRROR), []);
+    expectEqual(S.nextDueWeek(state, S.findTask(state, MIRROR), '2026-11-02'), '2026-11-07');
+  });
+
+  test('carry-over notes are saved per occurrence and counted', function () {
+    var state = reviewState();
+    var counts = R.applyReview(state, draftWith(state, '2026-10-24', '2026-10-30', {
+      'bathroom-change-bathroom-trash|2026-10-24': { note: 'I don\'t have trash bags' }
+    }), '2026-10-30');
+    expectEqual(counts.notes, 1);
+    expectEqual(S.getRecord(state, 'bathroom-change-bathroom-trash', '2026-10-24').note, 'I don\'t have trash bags');
+    expectEqual(S.getRecord(state, 'bathroom-change-bathroom-trash', '2026-10-24').status, undefined); // still open
+  });
+
+  test('an earlier review can be reopened and changed (Done back to Carry Over)', function () {
+    var state = reviewState();
+    R.applyReview(state, draftWith(state, '2026-10-24', '2026-10-30', { 'bathroom-clean-mirror|2026-10-24': { decision: 'done' } }), '2026-10-30');
+    var again = R.createDraft(state, '2026-10-24', '2026-11-02');
+    expectEqual(again.items['bathroom-clean-mirror|2026-10-24'].decision, 'done'); // listed so you can change it
+    again.items['bathroom-clean-mirror|2026-10-24'].decision = 'carry';
+    R.applyReview(state, again, '2026-11-02');
+    expectEqual(S.getRecord(state, MIRROR, '2026-10-24'), null);
+    expectEqual(weeksOf(S.overdueOccurrences(state, 'bathroom', '2026-11-02'), MIRROR), ['2026-10-24']);
+    expectEqual(state.reviews['2026-10-24'].reviewedOn, '2026-10-30');
+    expectEqual(state.reviews['2026-10-24'].updatedOn, '2026-11-02');
+  });
+
+  test('add needed supply: suggested or typed, once, or marked as needed if it exists', function () {
+    var state = reviewState();
+    state.supplies.push({ id: 'z1', name: 'Glass Cleaner', done: true });
+    var count = state.supplies.length;
+    var counts = R.applyReview(state, draftWith(state, '2026-10-24', '2026-10-30', {
+      'bathroom-change-bathroom-trash|2026-10-24': { supply: 'Small trash bags' },
+      'bedroom-change-bedroom-trash|2026-10-24': { supply: 'small  TRASH bags' },
+      'bathroom-clean-mirror|2026-10-24': { supply: 'glass cleaner' },
+      'bathroom-wash-floor-mats|2026-10-24': { decision: 'done', supply: 'Detergent' } // Done: ignored
+    }), '2026-10-30');
+    expectEqual(counts.supplies, 2);
+    expectEqual(state.supplies.length, count + 1);
+    expectEqual(P.findSupply(state, 'Small trash bags').done, false);
+    expectEqual(P.findSupply(state, 'Glass cleaner').done, false);
+    expectEqual(P.findSupply(state, 'Detergent'), null);
+    expectEqual(R.supplyAction(state, 'GLASS cleaner'), 'mark');
+    expectEqual(R.supplyAction(state, 'Sponges for oven'), 'add');
+  });
+
+  test('the summary preview changes nothing', function () {
+    var state = reviewState();
+    var before = canon(state);
+    var counts = R.previewReview(state, draftWith(state, '2026-10-24', '2026-10-30', {
+      'bathroom-clean-mirror|2026-10-24': { decision: 'done' },
+      'bathroom-change-bathroom-trash|2026-10-24': { note: 'x', supply: 'Small trash bags' }
+    }), '2026-10-30');
+    expectSame(counts, { done: 1, carried: 23, notes: 1, supplies: 1 });
+    expectEqual(canon(state), before);
+  });
+
+  test('reviews and notes are included in backups and restore exactly', function () {
+    var state = reviewState();
+    R.applyReview(state, draftWith(state, '2026-10-24', '2026-10-30', { 'bathroom-change-bathroom-trash|2026-10-24': { note: 'No bags' } }), '2026-10-30');
+    var result = H.validateBackup(JSON.stringify(H.createBackup(state, new Date())), '2026-11-02');
+    expectEqual(result.ok, true);
+    expectSame(result.state, state);
+    expectEqual(result.state.reviews['2026-10-24'].counts.carried, 24);
+  });
+
+  test('older 1.2 data without reviews or notes loads with safe defaults', function () {
+    var old = freshState();
+    delete old.reviews;
+    var checked = H.validateState(copy(old));
+    expectEqual(checked.ok, true);
+    expectSame(checked.state.reviews, {});
+  });
+
+  test('damaged reviews or notes are rejected', function () {
+    var a = freshState();
+    a.reviews = { '2026-10-24': { reviewedOn: '2026-10-30', updatedOn: '2026-10-30', decisions: { 'x|2026-10-24': 'skip' }, counts: { done: 0, carried: 0, notes: 0, supplies: 0 } } };
+    expectTrue(H.validateState(copy(a)).error.indexOf('week reviews') > -1, 'skip is not a choice');
+    var b = freshState();
+    b.records['bathroom-clean-toilet|2026-10-24'] = { taskId: 'bathroom-clean-toilet', week: '2026-10-24', room: 'bathroom', name: 'Clean toilet', note: '   ' };
+    expectTrue(H.validateState(copy(b)).error.indexOf('completion records') > -1, 'blank note');
+  });
+
+  // ======================================================================
+  section('Final QC: supply links and safe undo');
+
+  test('older 1.2 data gets missing default supply links when loaded', function () {
+    var old = freshState();
+    old.tasks.forEach(function (t) { delete t.supplies; });
+    var storage = fakeStorage({ 'householdReset.v2': JSON.stringify(old) });
+    var loaded = H.loadState(storage, ACTIVATED);
+    expectEqual(loaded.addedSupplyLinks, Object.keys(S.DEFAULT_TASK_SUPPLIES).length);
+    expectEqual(S.findTask(loaded.state, 'whole-house-change-scent-booster-plugins').supplies, ['Scent plugin refills']);
+    expectEqual(S.findTask(loaded.state, 'bathroom-clean-toilet').supplies, undefined); // no default: left as is
+  });
+
+  test('customised or cleared supply links are never overwritten', function () {
+    var state = freshState();
+    S.editTask(state, MIRROR, 'Clean mirror', 'biweekly', '2026-10-24', ACTIVATED, 'Microfiber cloth');
+    S.editTask(state, 'kitchen-clean-oven', 'Clean oven', 'quarterly', null, ACTIVATED, '');
+    var storage = fakeStorage({ 'householdReset.v2': JSON.stringify(state) });
+    var loaded = H.loadState(storage, ACTIVATED).state;
+    expectEqual(S.findTask(loaded, MIRROR).supplies, ['Microfiber cloth']);
+    expectEqual(S.findTask(loaded, 'kitchen-clean-oven').supplies, []);
+    expectEqual(P.prompts(loaded, '2026-12-28').some(function (p) { return p.task.id === 'kitchen-clean-oven'; }), false);
+  });
+
+  test('restoring an older 1.2 backup also adds missing default links', function () {
+    var old = freshState();
+    old.tasks.forEach(function (t) { delete t.supplies; });
+    var result = H.validateBackup(JSON.stringify({ app: 'household-reset', backupVersion: 2, exportedAt: 'x', data: old }), ACTIVATED);
+    expectEqual(S.findTask(result.state, 'whole-house-change-scent-booster-plugins').supplies, ['Scent plugin refills']);
+  });
+
+  test('undo keeps an added item you ticked on the Supplies tab since', function () {
+    var state = freshState();
+    var prompt = promptFor(state, '2026-11-02', 'whole-house-change-scent-booster-plugins');
+    P.addToSupplies(state, prompt, '2026-11-02');
+    P.findSupply(state, 'Scent plugin refills').done = true; // your manual change
+    var result = P.undoAnswer(state, prompt.key);
+    expectSame(result.kept, ['Scent plugin refills']);
+    expectEqual(P.findSupply(state, 'Scent plugin refills').done, true);
+    expectEqual(state.prep[prompt.key], undefined); // the answer itself is undone
+  });
+
+  test('undo leaves a marked item alone if you changed it since', function () {
+    var state = freshState();
+    state.supplies.push({ id: 'g1', name: 'Glass cleaner', done: false });
+    var prompt = promptFor(state, '2026-11-02', MIRROR);
+    P.addToSupplies(state, prompt, '2026-11-02'); // marks it (it was already needed)
+    P.findSupply(state, 'Glass cleaner').done = true; // you bought it and ticked it
+    var result = P.undoAnswer(state, prompt.key);
+    expectSame(result.kept, ['Glass cleaner']);
+    expectEqual(P.findSupply(state, 'Glass cleaner').done, true);
+  });
+
+  test('no prep questions are invented when next week needs nothing', function () {
+    expectEqual(P.prompts(freshState(), ACTIVATED).length, 0); // next week is Oct 31–Nov 6
+    expectEqual(P.nextWeek('2026-11-02'), '2026-11-07');
+    expectTrue(P.prompts(freshState(), '2026-11-02').length > 0, 'Nov 7–13 has supply-linked chores');
   });
 })();
