@@ -316,10 +316,57 @@
     };
   }
 
-  // Checks a backup file's text. Accepts version 1.2 backups, and version 1.1
-  // backups (which are upgraded the same way as saved 1.1 data).
-  // Returns { ok: true, state, summary } or { ok: false, error }. Saves nothing.
-  function validateBackup(text, today) {
+  function choreKey(chore) {
+    return chore.name.toLowerCase() + '|' + chore.recurring;
+  }
+
+  // Restoring a version 1.1 backup into version 1.2 data that's already in use.
+  // A 1.1 backup only knows about supplies, cats, and old chores, so it only
+  // changes those:
+  //  - Supplies and Cats are replaced by the backup's lists.
+  //  - Old chores and weekly scores are ADDED to the version 1.1 archive.
+  //    Weeks and chores already archived are kept as they are, and nothing
+  //    is added twice, so restoring the same file again changes nothing.
+  //  - Room chores, schedules, completion history, and laundry are kept.
+  // `current` must already be checked; it is copied, never changed.
+  function mergeV1Backup(current, v1Data, today) {
+    var merged = JSON.parse(JSON.stringify(current));
+    var legacy = merged.legacy || { archivedOn: today, chores: [], history: {} };
+    var added = { weeks: 0, keptWeeks: 0, chores: 0 };
+
+    Object.keys(v1Data.history).forEach(function (week) {
+      if (legacy.history[week]) {
+        added.keptWeeks++;
+      } else {
+        legacy.history[week] = v1Data.history[week];
+        added.weeks++;
+      }
+    });
+
+    var ids = {};
+    var names = {};
+    legacy.chores.forEach(function (c) { ids[c.id] = true; names[choreKey(c)] = true; });
+    v1Data.chores.forEach(function (c) {
+      if (ids[c.id] || names[choreKey(c)]) return;
+      legacy.chores.push(c);
+      ids[c.id] = true;
+      names[choreKey(c)] = true;
+      added.chores++;
+    });
+
+    merged.legacy = legacy;
+    merged.supplies = v1Data.supplies;
+    merged.pets = v1Data.pets;
+    return { state: merged, added: added };
+  }
+
+  // Checks a backup file's text. Returns { ok: true, state, summary } or
+  // { ok: false, error }. It never saves anything.
+  //  - Version 1.2 backups contain everything, so they replace everything.
+  //  - Version 1.1 backups: if `current` (the version 1.2 data in use) is
+  //    given, they're merged into it (see mergeV1Backup). Without `current`
+  //    they're upgraded the same way as saved 1.1 data.
+  function validateBackup(text, today, current) {
     var notBackup = "This file isn't a Household Reset backup.";
     if (typeof text !== 'string' || text.trim() === '') return { ok: false, error: 'This file is empty.' };
     if (text.length > MAX_BACKUP_CHARACTERS) return { ok: false, error: 'This file is too large to be a Household Reset backup.' };
@@ -332,8 +379,21 @@
     if (file.backupVersion === 1) {
       var old = L.validateBackup(text); // version 1.1's own checks
       if (!old.ok) return old;
+      if (current) {
+        var checkedCurrent = validateState(current);
+        if (!checkedCurrent.ok) {
+          return { ok: false, error: 'Your current data could not be checked, so this backup was not merged into it.' };
+        }
+        var merge = mergeV1Backup(checkedCurrent.state, old.state, today);
+        var mergeSummary = summarize(merge.state, 'v1', file.exportedAt);
+        mergeSummary.mode = 'merge';
+        mergeSummary.added = merge.added;
+        return { ok: true, state: merge.state, summary: mergeSummary };
+      }
       var upgraded = createState(today, old.state);
-      return { ok: true, state: upgraded, summary: summarize(upgraded, 'v1', file.exportedAt) };
+      var freshSummary = summarize(upgraded, 'v1', file.exportedAt);
+      freshSummary.mode = 'fresh';
+      return { ok: true, state: upgraded, summary: freshSummary };
     }
     if (file.backupVersion === BACKUP_VERSION) {
       var checked = validateState(file.data);
@@ -353,6 +413,7 @@
     BACKUP_VERSION: BACKUP_VERSION,
     createState: createState,
     migrateFromV1: migrateFromV1,
+    mergeV1Backup: mergeV1Backup,
     loadState: loadState,
     saveState: saveState,
     validateState: validateState,
