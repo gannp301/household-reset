@@ -16,6 +16,7 @@
   var W = window.HouseholdLaundry;
   var H = window.HouseholdStorage;
   var P = window.HouseholdPrep;
+  var R = window.HouseholdReview;
 
   var state = null;
   // 'ok'          saving normally
@@ -221,6 +222,15 @@
     document.getElementById('week-range').textContent = S.formatWeekRange(selectedWeek);
     document.getElementById('this-week').hidden = selectedWeek === cw;
 
+    // Finish Cleaning Week: this week or earlier weeks only.
+    var review = state.reviews[selectedWeek];
+    var finish = document.getElementById('finish-week');
+    document.getElementById('review-row').hidden = !R.canReview(state, selectedWeek, today());
+    finish.textContent = review ? 'Edit week review' : 'Finish Cleaning Week';
+    var reviewStatus = document.getElementById('review-status');
+    reviewStatus.hidden = !review && !weekMessage;
+    reviewStatus.textContent = weekMessage || (review ? '✓ Reviewed ' + S.formatShort(review.updatedOn) : '');
+
     var stats = document.getElementById('overview-stats');
     stats.textContent = '';
     [
@@ -264,21 +274,30 @@
     }).join(' · ');
   }
 
-  function headsUpText(group, relation) {
+  // "Oct 24", "Oct 17 & Oct 24", or "Oct 10 – Oct 24" for the original due weeks.
+  function weeksLabel(items) {
+    var weeks = [];
+    items.forEach(function (i) { if (weeks.indexOf(i.week) === -1) weeks.push(i.week); });
+    weeks.sort();
+    if (weeks.length === 1) return S.formatShort(weeks[0]);
+    if (weeks.length === 2) return S.formatShort(weeks[0]) + ' & ' + S.formatShort(weeks[1]);
+    return S.formatShort(weeks[0]) + ' – ' + S.formatShort(weeks[weeks.length - 1]);
+  }
+
+  // [title, short detail] for one Heads up row. Titles name the exact dates.
+  function headsUpText(group, relation, week) {
     var n = group.items.length;
-    if (group.kind === 'overdue' && relation === 'current') {
-      var oldest = group.items.reduce(function (min, i) { return i.week < min ? i.week : min; }, group.items[0].week);
-      return [count(n, 'overdue chore', 'overdue chores'), 'From earlier weeks · oldest was due the week of ' + S.formatShort(oldest)];
-    }
     if (group.kind === 'overdue') {
-      return [count(n, 'chore', 'chores') + ' missed in this week', 'Still overdue · tick them from their rooms'];
+      return ['Overdue from ' + weeksLabel(group.items),
+        relation === 'current' ? count(n, 'chore', 'chores') + ' still open from earlier weeks'
+          : count(n, 'chore', 'chores') + ' from this week, still not done'];
     }
     if (group.kind === 'due') {
-      return [count(n, 'less-frequent chore', 'less-frequent chores') + (relation === 'current' ? ' due this week' : ' due in this week'),
-        frequencyBreakdown(group.items)];
+      return ['Due ' + S.formatRangeShort(week),
+        count(n, 'less-frequent chore', 'less-frequent chores') + ' · ' + frequencyBreakdown(group.items)];
     }
-    return [count(n, 'monthly or quarterly chore', 'monthly or quarterly chores') + (relation === 'current' ? ' next week' : ' the week after'),
-      'Week of ' + S.formatShort(group.week) + ' · ' + frequencyBreakdown(group.items)];
+    return [(relation === 'current' ? 'Coming next week: ' : 'Coming the week after: ') + S.formatRangeShort(group.week),
+      count(n, 'monthly or quarterly chore', 'monthly or quarterly chores') + ' · ' + frequencyBreakdown(group.items)];
   }
 
   function headsUpItem(item, kind) {
@@ -287,18 +306,24 @@
     var badges = el('span', 'badges');
     badges.appendChild(el('span', 'badge', roomName(item.task.room)));
     badges.appendChild(freqBadge(item.task.frequency));
-    if (kind === 'overdue') badges.appendChild(el('span', 'badge status-overdue', 'Due week of ' + S.formatShort(item.week)));
+    if (kind === 'overdue') badges.appendChild(el('span', 'badge status-overdue', 'Overdue from ' + S.formatShort(item.week)));
     else if (item.effectiveWeek !== item.week) badges.appendChild(el('span', 'badge status-moved', 'Moved from week of ' + S.formatShort(item.week)));
     li.appendChild(badges);
+    if (item.note) li.appendChild(el('p', 'hu-note', 'Note: ' + item.note));
     return li;
   }
 
   // Follows the week selected in the navigator, and says which week that is.
   function renderHeadsUp() {
     var hu = S.headsUp(state, selectedWeek, today());
-    var label = { current: 'this week', past: 'a past week', future: 'a future week' }[hu.relation];
-    document.getElementById('heads-up-scope').textContent =
-      'For the week shown above: ' + S.formatWeekRange(selectedWeek) + ' (' + label + ').';
+    var context = {
+      current: 'today\'s week',
+      past: 'a past week you\'re viewing (not today\'s week)',
+      future: 'a future week you\'re viewing (not today\'s week)'
+    }[hu.relation];
+    var scope = document.getElementById('heads-up-scope');
+    scope.textContent = 'Summarizing ' + S.formatRangeShort(selectedWeek) + ' · ' + context;
+    scope.className = 'hint hu-scope' + (hu.relation === 'current' ? '' : ' hu-scope-other');
     var box = document.getElementById('heads-up-groups');
     box.textContent = '';
 
@@ -312,7 +337,7 @@
     var list = el('ul', 'hu-list');
     hu.groups.forEach(function (group) {
       var style = HEADS_UP_STYLE[group.kind];
-      var text = headsUpText(group, hu.relation);
+      var text = headsUpText(group, hu.relation, selectedWeek);
       var li = el('li');
       var details = el('details', 'hu-group ' + style.className);
       details.open = !!openHeadsUp[group.kind];
@@ -390,6 +415,7 @@
   // ---------- Get ready for next week ----------
 
   var prepOpenChoice = null; // null = open automatically when something needs an answer
+  var prepMessage = '';
   var settingPrepOpen = false;
 
   function joinNames(names) {
@@ -485,6 +511,7 @@
 
     var ul = document.getElementById('prep-list');
     ul.textContent = '';
+    if (prepMessage) ul.appendChild(el('li', 'prep-message', prepMessage));
     if (!groups.length) {
       ul.appendChild(el('li', 'hu-clear', 'Nothing to prepare for next week.'));
       return;
@@ -502,8 +529,17 @@
     var group = P.groupPrompts(P.prompts(state, t)).filter(function (g) { return g.key === key; })[0];
     if (!group) return;
     var action = btn.dataset.action;
+    prepMessage = '';
     if (action === 'prep-undo') {
-      group.prompts.slice().reverse().forEach(function (p) { P.undoAnswer(state, p.key); });
+      var kept = [];
+      group.prompts.slice().reverse().forEach(function (p) {
+        var result = P.undoAnswer(state, p.key);
+        if (result && result.kept) kept = kept.concat(result.kept);
+      });
+      if (kept.length) {
+        prepMessage = 'Answer undone. ' + joinNames(kept.filter(function (n, i) { return kept.indexOf(n) === i; })) +
+          ' stayed as you set it on the Supplies tab.';
+      }
     } else if (action === 'prep-stocked') {
       group.pending.forEach(function (p) { P.answerStocked(state, p, t); });
     } else if (action === 'prep-add') {
@@ -544,7 +580,11 @@
     } else if (o.status === 'skipped') {
       badges.push(el('span', 'badge status-skipped', '⤼ Skipped'));
     } else if (o.status === 'overdue') {
-      badges.push(el('span', 'badge status-overdue', '⚠ Overdue · due week of ' + S.formatShort(o.week)));
+      badges.push(el('span', 'badge status-overdue', '⚠ Overdue from ' + S.formatShort(o.week)));
+    } else if (o.status === 'due' && o.effectiveWeek < selectedWeek) {
+      // Shown in a future week's list: still open now, not overdue yet.
+      badges.push(el('span', 'badge status-upcoming', '◷ Open from ' + S.formatShort(o.week) +
+        ' · overdue after ' + S.formatShort(S.weekEnd(o.effectiveWeek))));
     } else if (o.status === 'upcoming') {
       badges.push(el('span', 'badge status-upcoming', '◷ Upcoming'));
     }
@@ -584,6 +624,13 @@
     var badges = el('span', 'badges');
     badges.appendChild(freqBadge(o.task.frequency));
     statusBadges(o).forEach(function (b) { badges.appendChild(b); });
+    var note = o.record && o.record.note ? o.record.note : '';
+    if (note) {
+      var noteBadge = el('span', 'badge note-badge', '📝 Note');
+      noteBadge.title = note;
+      noteBadge.setAttribute('aria-label', 'Has a note: ' + note);
+      badges.appendChild(noteBadge);
+    }
     body.appendChild(badges);
 
     var isOpen = expanded === occurrenceKey(o);
@@ -606,6 +653,19 @@
         moveWrap.appendChild(button('move', 'Move', 'btn-quiet', data));
         actions.appendChild(moveWrap);
       }
+      // A note for this occurrence only (it stays in History).
+      var noteWrap = el('div', 'note-wrap');
+      var noteInput = el('input');
+      noteInput.type = 'text';
+      noteInput.className = 'note-input';
+      noteInput.maxLength = 200;
+      noteInput.value = note;
+      noteInput.placeholder = 'Note (optional), e.g. "No trash bags"';
+      noteInput.setAttribute('aria-label', 'Note for "' + o.task.name + '" (week of ' + S.formatShort(o.week) + ')');
+      noteWrap.appendChild(noteInput);
+      noteWrap.appendChild(button('save-note', note ? 'Save note' : 'Add note', 'btn-quiet', data));
+      if (note) noteWrap.appendChild(button('clear-note', 'Clear note', 'btn-small', data));
+      actions.appendChild(noteWrap);
       li.appendChild(actions);
     }
     return li;
@@ -718,7 +778,7 @@
       badges.appendChild(freqBadge(task.frequency));
       var next = S.nextDueWeek(state, task, today());
       if (next) badges.appendChild(el('span', 'badge', 'Next due ' + S.formatShort(next)));
-      if (task.supplies) badges.appendChild(el('span', 'badge', 'Needs: ' + task.supplies.join(', ')));
+      if (task.supplies && task.supplies.length) badges.appendChild(el('span', 'badge', 'Needs: ' + task.supplies.join(', ')));
       body.appendChild(badges);
       var actions = el('div', 'item-actions');
       var edit = button('edit-task', 'Edit', 'btn-small', { task: task.id });
@@ -752,20 +812,35 @@
 
     if (room.id === 'laundry') content.appendChild(renderLaundry());
 
-    // Missed chores from earlier weeks (shown on the current week).
-    var overdue = selectedWeek === cw ? S.overdueOccurrences(state, room.id, t) : [];
-    if (overdue.length) {
-      var od = sectionBlock('Overdue from earlier weeks', 'Missed chores stay here, with their original due week, until you do or skip them.');
-      od.classList.add('overdue-section');
-      var odList = el('ul', 'item-list');
-      overdue.forEach(function (o) { odList.appendChild(renderOccurrence(o)); });
-      od.appendChild(odList);
-      od.appendChild(button('skip-all', 'Skip all overdue in this room', 'btn-quiet'));
-      content.appendChild(od);
+    // Unfinished chores carry over automatically once their week ends.
+    // Today's week: they're overdue. A future week: a preview of what's still
+    // open (nothing changes until those weeks really end).
+    if (selectedWeek === cw) {
+      var overdue = S.overdueOccurrences(state, room.id, t);
+      if (overdue.length) {
+        var od = sectionBlock('Overdue (carried over)', 'Unfinished chores from earlier weeks. They keep their original due date until you finish them.');
+        od.classList.add('overdue-section');
+        var odList = el('ul', 'item-list');
+        overdue.forEach(function (o) { odList.appendChild(renderOccurrence(o)); });
+        od.appendChild(odList);
+        od.appendChild(button('skip-all', 'Skip all overdue in this room', 'btn-quiet'));
+        content.appendChild(od);
+      }
+    } else if (selectedWeek > cw) {
+      var open = S.openBefore(state, room.id, selectedWeek, t);
+      if (open.length) {
+        var ob = sectionBlock('Still open from earlier weeks', 'If these aren\'t done before ' + S.formatRangeShort(selectedWeek) +
+          ', they\'ll carry over into it as overdue. Looking ahead doesn\'t change anything.');
+        ob.classList.add('carry-preview');
+        var obList = el('ul', 'item-list');
+        open.forEach(function (o) { obList.appendChild(renderOccurrence(o)); });
+        ob.appendChild(obList);
+        content.appendChild(ob);
+      }
     }
 
     // Chores due in the selected week.
-    var title = selectedWeek === cw ? 'Due this week' : 'Due in the week of ' + S.formatShort(selectedWeek);
+    var title = 'Due ' + S.formatRangeShort(selectedWeek) + (selectedWeek === cw ? ' (this week)' : '');
     var due = sectionBlock(title);
     if (before) {
       due.appendChild(el('p', 'empty', 'This week is before room schedules started, so there is nothing to tick here.'));
@@ -1054,6 +1129,7 @@
       var late = o.record.completedOn > S.weekEnd(o.effectiveWeek);
       text += ' — done ' + S.formatShort(o.record.completedOn) + (late ? ' (late)' : '');
     }
+    if (o.record && o.record.note) text += ' — note: "' + o.record.note + '"';
     return text;
   }
 
@@ -1085,6 +1161,7 @@
       head.appendChild(el('span', '', S.formatShort(week) + ' – ' + S.formatShort(S.weekEnd(week))));
       head.appendChild(el('span', '', h.done.length + ' done · ' + h.skipped.length + ' skipped · ' + h.missed.length + ' missed'));
       li.appendChild(head);
+      if (state.reviews[week]) li.appendChild(el('span', 'chip chip-reviewed', '✓ Reviewed ' + S.formatShort(state.reviews[week].updatedOn)));
       var total = h.done.length + h.missed.length;
       li.appendChild(miniProgress(total ? Math.round((h.done.length / total) * 100) : 0));
       var details = el('details');
@@ -1140,6 +1217,235 @@
     }
   }
 
+  // ---------- Finish Cleaning Week ----------
+
+  var reviewDraft = null; // your choices while the review is open (not saved yet)
+  var reviewStep = 'choose'; // 'choose' or 'summary'
+  var reviewError = '';
+  var weekMessage = '';
+
+  function reviewItemLabel(o) {
+    return o.task.name + ' (' + roomName(o.task.room) + ')';
+  }
+
+  function supplyStatusText(name) {
+    var action = R.supplyAction(state, name);
+    if (action === 'add') return 'Will be added to Supplies as needed.';
+    if (action === 'mark') return 'Already on Supplies: will be marked as needed.';
+    return 'Pick a suggestion or type a supply name.';
+  }
+
+  function renderReviewItem(o) {
+    var key = S.recordKey(o.task.id, o.week);
+    var choice = reviewDraft.items[key];
+    var li = el('li', 'review-item freq-' + o.task.frequency);
+    li.dataset.key = key;
+    var head = el('div', 'review-item-head');
+    head.appendChild(el('span', 'review-item-name', o.task.name));
+    var badges = el('span', 'badges');
+    badges.appendChild(freqBadge(o.task.frequency));
+    if (o.status === 'overdue') badges.appendChild(el('span', 'badge status-overdue', 'Overdue from ' + S.formatShort(o.week)));
+    head.appendChild(badges);
+    li.appendChild(head);
+
+    // Exactly two choices, as radio buttons.
+    var group = el('fieldset', 'choice');
+    group.appendChild(el('legend', 'visually-hidden', 'What to do with "' + o.task.name + '"'));
+    [['carry', 'Carry Over'], ['done', 'Done']].forEach(function (c) {
+      var label = el('label', 'choice-option');
+      var radio = el('input');
+      radio.type = 'radio';
+      radio.name = 'choice-' + key;
+      radio.value = c[0];
+      radio.checked = choice.decision === c[0];
+      radio.dataset.key = key;
+      label.appendChild(radio);
+      label.appendChild(document.createTextNode(' ' + c[1]));
+      group.appendChild(label);
+    });
+    li.appendChild(group);
+
+    if (choice.decision === 'carry') {
+      var note = el('input');
+      note.type = 'text';
+      note.className = 'review-note';
+      note.maxLength = 200;
+      note.value = choice.note;
+      note.placeholder = 'Why not finished? (optional note)';
+      note.dataset.key = key;
+      note.setAttribute('aria-label', 'Note for "' + o.task.name + '" (optional)');
+      li.appendChild(note);
+
+      var supply = el('details', 'review-supply');
+      supply.open = !!choice.supply;
+      supply.appendChild(el('summary', 'review-supply-summary', '+ Add needed supply'));
+      var suggestions = (o.task.supplies || []);
+      if (suggestions.length) {
+        var chips = el('div', 'supply-suggestions');
+        suggestions.forEach(function (name) {
+          var chip = button('review-suggest', name, 'btn-small btn-quiet', { key: key, name: name });
+          chip.setAttribute('aria-label', 'Use suggested supply: ' + name);
+          chips.appendChild(chip);
+        });
+        supply.appendChild(chips);
+      }
+      var supplyInput = el('input');
+      supplyInput.type = 'text';
+      supplyInput.className = 'review-supply-input';
+      supplyInput.maxLength = 80;
+      supplyInput.value = choice.supply;
+      supplyInput.placeholder = 'Supply name';
+      supplyInput.dataset.key = key;
+      supplyInput.setAttribute('aria-label', 'Supply needed for "' + o.task.name + '" (optional)');
+      supply.appendChild(supplyInput);
+      var status = el('p', 'supply-status hint', supplyStatusText(choice.supply));
+      status.setAttribute('aria-live', 'polite');
+      supply.appendChild(status);
+      li.appendChild(supply);
+    }
+    return li;
+  }
+
+  function renderReview() {
+    var box = document.getElementById('review-view');
+    box.textContent = '';
+    var t = today();
+    var data = R.reviewData(state, reviewDraft.week, t);
+
+    var title = el('h2', '', 'Finish Cleaning Week');
+    title.id = 'review-title';
+    title.tabIndex = -1;
+    box.appendChild(title);
+    box.appendChild(el('p', 'review-range', S.formatWeekRange(reviewDraft.week) +
+      (data.review ? ' · reviewed ' + S.formatShort(data.review.updatedOn) + ', you can change it' : '')));
+
+    var stats = el('div', 'stats review-stats');
+    [['Scheduled', data.scheduled], ['Completed', data.completed], ['Unfinished', data.unfinished]].forEach(function (s) {
+      var tile = el('div', 'stat');
+      tile.appendChild(el('span', 'stat-num', String(s[1])));
+      tile.appendChild(el('span', 'stat-label', s[0]));
+      stats.appendChild(tile);
+    });
+    box.appendChild(stats);
+    if (reviewError) box.appendChild(el('p', 'backup-status error', reviewError));
+
+    if (reviewStep === 'summary') {
+      var counts = R.previewReview(state, reviewDraft, t);
+      var summary = el('ul', 'review-summary');
+      summary.setAttribute('aria-label', 'Review summary');
+      [
+        count(counts.done, 'chore', 'chores') + ' marked Done',
+        count(counts.carried, 'chore', 'chores') + ' carried over',
+        count(counts.notes, 'note', 'notes') + ' added or updated',
+        count(counts.supplies, 'supply', 'supplies') + ' added or marked as needed'
+      ].forEach(function (line) { summary.appendChild(el('li', '', line)); });
+      box.appendChild(summary);
+      box.appendChild(el('p', 'hint', 'Carried-over chores stay open and become overdue after this week, keeping their original due date.'));
+      var confirmRow = el('div', 'backup-actions');
+      confirmRow.appendChild(button('review-confirm', 'Confirm', 'btn-primary'));
+      confirmRow.appendChild(button('review-back', 'Go Back', 'btn-quiet'));
+      box.appendChild(confirmRow);
+      return;
+    }
+
+    if (!data.items.length) {
+      box.appendChild(el('p', 'hu-clear', '✓ Everything scheduled in this week is done.'));
+    } else {
+      box.appendChild(el('p', 'hint', 'For each unfinished chore: Carry Over keeps it open (it becomes overdue after this week and keeps its due date). ' +
+        'Done marks it complete today. Chores you already ticked stay completed.'));
+      S.ROOMS.forEach(function (room) {
+        var items = data.items.filter(function (o) { return o.task.room === room.id; });
+        if (!items.length) return;
+        box.appendChild(el('h3', 'review-room', room.icon + ' ' + room.name));
+        var ul = el('ul', 'review-list');
+        items.forEach(function (o) { ul.appendChild(renderReviewItem(o)); });
+        box.appendChild(ul);
+      });
+    }
+    var row = el('div', 'backup-actions');
+    row.appendChild(button('review-next', 'Review summary', 'btn-primary'));
+    row.appendChild(button('review-cancel', 'Cancel', 'btn-quiet'));
+    box.appendChild(row);
+  }
+
+  function openReview() {
+    reviewDraft = R.createDraft(state, selectedWeek, today());
+    reviewStep = 'choose';
+    reviewError = '';
+    weekMessage = '';
+    openRoom = null;
+    render();
+    document.getElementById('review-title').focus();
+  }
+
+  function closeReview() {
+    reviewDraft = null;
+    reviewError = '';
+    render();
+    document.getElementById('finish-week').focus();
+  }
+
+  // Save first, then switch: the review only counts once it's really saved.
+  function confirmReview() {
+    var t = today();
+    var updated = JSON.parse(JSON.stringify(state));
+    var counts = R.applyReview(updated, reviewDraft, t);
+    var storage = getStorage();
+    if (storageMode !== 'ok' || !storage || !H.saveState(storage, updated)) {
+      reviewError = 'The review could not be saved in this browser, so nothing was changed. Your choices are still here.';
+      render();
+      return;
+    }
+    state = updated;
+    reviewDraft = null;
+    reviewError = '';
+    weekMessage = '✓ Week reviewed: ' + count(counts.done, 'chore', 'chores') + ' done, ' +
+      count(counts.carried, 'chore', 'chores') + ' carried over.';
+    render();
+    document.getElementById('finish-week').focus();
+  }
+
+  function onReviewClick(event) {
+    var btn = event.target.closest('button[data-action]');
+    if (!btn) return;
+    var d = btn.dataset;
+    if (d.action === 'review-next') {
+      reviewStep = 'summary';
+      render();
+      var first = document.querySelector('#review-view [data-action="review-confirm"]');
+      if (first) first.focus();
+    } else if (d.action === 'review-back') {
+      reviewStep = 'choose';
+      render();
+    } else if (d.action === 'review-cancel') {
+      closeReview();
+    } else if (d.action === 'review-confirm') {
+      confirmReview();
+    } else if (d.action === 'review-suggest') {
+      reviewDraft.items[d.key].supply = d.name;
+      render();
+    }
+  }
+
+  // Typing and choosing update the draft only; nothing is saved until Confirm.
+  function onReviewInput(event) {
+    var target = event.target;
+    var key = target.dataset.key;
+    if (!key || !reviewDraft || !reviewDraft.items[key]) return;
+    if (target.type === 'radio') {
+      reviewDraft.items[key].decision = target.value;
+      render();
+      var again = document.querySelector('#review-view input[name="choice-' + key.replace(/"/g, '\\"') + '"][value="' + target.value + '"]');
+      if (again) again.focus();
+    } else if (target.classList.contains('review-note')) {
+      reviewDraft.items[key].note = target.value;
+    } else if (target.classList.contains('review-supply-input')) {
+      reviewDraft.items[key].supply = target.value;
+      var status = target.parentNode.querySelector('.supply-status');
+      if (status) status.textContent = supplyStatusText(target.value);
+    }
+  }
+
   // ---------- Drawing everything ----------
 
   function render() {
@@ -1150,9 +1456,13 @@
       shownCurrentWeek = cw;
     }
     renderWeek();
-    document.getElementById('rooms-home').hidden = !!openRoom;
-    document.getElementById('room-view').hidden = !openRoom;
-    if (openRoom) {
+    var reviewing = !!reviewDraft;
+    document.getElementById('review-view').hidden = !reviewing;
+    document.getElementById('rooms-home').hidden = reviewing || !!openRoom;
+    document.getElementById('room-view').hidden = reviewing || !openRoom;
+    if (reviewing) {
+      renderReview();
+    } else if (openRoom) {
       renderRoomView();
     } else {
       renderHeadsUp();
@@ -1196,6 +1506,12 @@
       case 'skip':
         S.toggleSkip(state, d.task, d.week);
         expanded = null;
+        break;
+      case 'save-note':
+        S.setNote(state, d.task, d.week, btn.parentNode.querySelector('.note-input').value);
+        break;
+      case 'clear-note':
+        S.setNote(state, d.task, d.week, '');
         break;
       case 'move':
         var select = btn.parentNode.querySelector('select');
@@ -1325,6 +1641,8 @@
 
   function changeWeek(week) {
     selectedWeek = week;
+    reviewDraft = null;
+    weekMessage = '';
     expanded = null;
     render();
   }
@@ -1535,6 +1853,7 @@
     }
     state = result.state;
     storageMode = 'ok';
+    reviewDraft = null;
     hideNotice();
     editing = null;
     editingTask = null;
@@ -1585,6 +1904,12 @@
     roomContent.addEventListener('change', onRoomChange);
 
     document.getElementById('prep-list').addEventListener('click', onPrepClick);
+
+    document.getElementById('finish-week').addEventListener('click', openReview);
+    var reviewView = document.getElementById('review-view');
+    reviewView.addEventListener('click', onReviewClick);
+    reviewView.addEventListener('change', onReviewInput);
+    reviewView.addEventListener('input', onReviewInput);
     document.getElementById('prep-card').addEventListener('toggle', function () {
       // Remember your choice only when YOU open or close it.
       if (settingPrepOpen) settingPrepOpen = false;
