@@ -846,6 +846,12 @@ select:focus-visible,
   color: var(--overdue-ink);
 }
 
+/* Compact put-away reminder under the Laundry room heading */
+.laundry-late-note {
+  display: inline-block;
+  margin: 10px 0 0;
+}
+
 /* ---------- Inside a room ---------- */
 .back-btn {
   margin-bottom: 12px;
