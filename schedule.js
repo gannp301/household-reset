@@ -70,6 +70,21 @@
     }
   };
 
+  // Supplies a chore genuinely needs, used by "Get ready for next week".
+  // Only less-frequent chores with a real supply need are listed, so there
+  // are no generic questions for everyday chores.
+  var DEFAULT_TASK_SUPPLIES = {
+    'whole-house-change-scent-booster-plugins': ['Scent plugin refills'],
+    'kitchen-clean-oven': ['Oven cleaner'],
+    'bathroom-deep-clean-shower-tub': ['Tub & tile cleaner'],
+    'bathroom-clean-mirror': ['Glass cleaner'],
+    'bedroom-clean-bedroom-mirror': ['Glass cleaner'],
+    'bathroom-change-bathroom-trash': ['Small trash bags'],
+    'bedroom-change-bedroom-trash': ['Small trash bags'],
+    'bathroom-mop-bathroom-floor': ['Floor cleaner'],
+    'kitchen-mop-kitchen-floor': ['Floor cleaner']
+  };
+
   // ---------- Dates as day numbers ----------
 
   function pad2(n) {
@@ -206,6 +221,7 @@
         (lists[frequency] || []).forEach(function (name) {
           var task = { id: room.id + '-' + slug(name), room: room.id, name: name, frequency: frequency, since: week };
           if (frequency === 'biweekly') task.anchor = BIWEEKLY_ANCHOR;
+          if (DEFAULT_TASK_SUPPLIES[task.id]) task.supplies = DEFAULT_TASK_SUPPLIES[task.id].slice();
           tasks.push(task);
         });
       });
@@ -217,19 +233,45 @@
     return state.tasks.filter(function (t) { return t.id === id; })[0] || null;
   }
 
+  // Tidies a list of supply names (or "a, b, c" text): no blanks, no
+  // repeats (ignoring capitals), at most 5. Returns [] when there are none.
+  function cleanSupplies(list) {
+    if (typeof list === 'string') list = list.split(',');
+    if (!Array.isArray(list)) return [];
+    var seen = {};
+    var out = [];
+    list.forEach(function (item) {
+      var name = String(item || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      var key = name.toLowerCase();
+      if (name && !seen[key] && out.length < 5) {
+        seen[key] = true;
+        out.push(name);
+      }
+    });
+    return out;
+  }
+
+  function setSupplies(task, supplies) {
+    var clean = cleanSupplies(supplies);
+    if (clean.length) task.supplies = clean; else delete task.supplies;
+  }
+
   // Adds a chore to a room. Returns the new task, or null if the name is blank.
-  function addTask(state, roomId, name, frequency, anchor, today) {
+  // `supplies` (optional) lists household supplies the chore needs.
+  function addTask(state, roomId, name, frequency, anchor, today, supplies) {
     var clean = cleanName(name);
     if (!clean || !roomById(roomId) || !FREQUENCIES[frequency]) return null;
     var task = { id: makeId(), room: roomId, name: clean, frequency: frequency, since: weekStart(today) };
     if (frequency === 'biweekly') task.anchor = isSaturday(anchor) ? anchor : BIWEEKLY_ANCHOR;
+    setSupplies(task, supplies);
     state.tasks.push(task);
     return task;
   }
 
   // Renames a chore or changes how often it repeats. A new schedule only
   // counts from this week on, so it can't create overdue chores in the past.
-  function editTask(state, id, name, frequency, anchor, today) {
+  // Leave `supplies` undefined to keep the chore's supplies as they are.
+  function editTask(state, id, name, frequency, anchor, today, supplies) {
     var task = findTask(state, id);
     var clean = cleanName(name);
     if (!task || !clean || !FREQUENCIES[frequency]) return false;
@@ -239,6 +281,7 @@
     task.frequency = frequency;
     if (newAnchor) task.anchor = newAnchor; else delete task.anchor;
     if (scheduleChanged) task.since = weekStart(today);
+    if (supplies !== undefined) setSupplies(task, supplies);
     return true;
   }
 
@@ -478,10 +521,18 @@
     });
   }
 
+  function isLessFrequent(task) {
+    return task.frequency !== 'weekly' && isScheduled(task);
+  }
+
   function overview(state, week, today) {
     var occ = occurrencesForWeek(state, null, week, today);
     var progress = progressOf(occ);
     var current = weekStart(today);
+    // Less-frequent chores due in the week after the one shown (not done or skipped).
+    var nextWeek = occurrencesForWeek(state, null, addWeeks(week, 1), today).filter(function (o) {
+      return isLessFrequent(o.task) && o.status !== 'done' && o.status !== 'skipped';
+    }).length;
     return {
       week: week,
       isCurrent: week === current,
@@ -489,8 +540,51 @@
       due: progress.total,
       completed: progress.done,
       overdue: overdueOccurrences(state, null, today).length,
-      upcoming: upcoming(state, today, 4).filter(function (u) { return u.week > current; }).length
+      nextWeek: nextWeek
     };
+  }
+
+  // ---------- Heads up ----------
+
+  // Up to three summary groups for the week being viewed, most important
+  // first. Every chore listed belongs to the week the group names:
+  //   'overdue'  current week: missed chores from earlier weeks (any frequency)
+  //              past week:    chores from THAT week still not done
+  //   'due'      less-frequent chores due in the week viewed, not yet done
+  //   'soon'     monthly/quarterly chores due the week after the one viewed
+  // Ordinary weekly chores only appear when overdue. Reading only.
+  function headsUp(state, week, today) {
+    var current = weekStart(today);
+    var relation = week === current ? 'current' : week < current ? 'past' : 'future';
+    var result = { week: week, relation: relation, beforeActivation: week < state.activatedWeek, groups: [] };
+    if (result.beforeActivation) return result;
+
+    function item(o) {
+      return { task: o.task, week: o.week, effectiveWeek: o.effectiveWeek };
+    }
+
+    var inWeek = occurrencesForWeek(state, null, week, today);
+    var overdue = relation === 'current'
+      ? overdueOccurrences(state, null, today)
+      : relation === 'past' ? inWeek.filter(function (o) { return o.status === 'overdue'; }) : [];
+    if (overdue.length) {
+      result.groups.push({ kind: 'overdue', items: overdue.map(item) });
+    }
+
+    if (relation !== 'past') {
+      var due = inWeek.filter(function (o) {
+        return isLessFrequent(o.task) && (o.status === 'due' || o.status === 'upcoming');
+      });
+      if (due.length) result.groups.push({ kind: 'due', items: due.map(item) });
+
+      var following = addWeeks(week, 1);
+      var soon = occurrencesForWeek(state, null, following, today).filter(function (o) {
+        return (o.task.frequency === 'monthly' || o.task.frequency === 'quarterly') && o.status === 'upcoming';
+      });
+      if (soon.length) result.groups.push({ kind: 'soon', week: following, items: soon.map(item) });
+    }
+    result.groups = result.groups.slice(0, 3);
+    return result;
   }
 
   // A read-only summary of one past week for the History tab.
@@ -558,6 +652,9 @@
     nextDueWeek: nextDueWeek,
     upcoming: upcoming,
     overview: overview,
+    headsUp: headsUp,
+    cleanSupplies: cleanSupplies,
+    DEFAULT_TASK_SUPPLIES: DEFAULT_TASK_SUPPLIES,
     weekHistory: weekHistory
   };
 })(typeof window !== 'undefined' ? window : globalThis);
