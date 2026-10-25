@@ -454,6 +454,21 @@ input:focus-visible {
   margin: 0 0 10px;
 }
 
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notice-actions:empty {
+  display: none;
+}
+
+.week-laundry-total {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
 select {
   min-height: var(--tap);
   max-width: 100%;
