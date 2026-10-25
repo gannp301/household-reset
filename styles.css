@@ -418,6 +418,10 @@ input:focus-visible {
   margin: 0 0 8px;
 }
 
+.restore-summary {
+  white-space: pre-line; /* shows each "•" point on its own line */
+}
+
 .restore-title {
   font-weight: 700;
   font-size: 1.1rem;
