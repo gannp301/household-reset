@@ -355,4 +355,151 @@
     expectEqual(result.state.supplyCategories.some(function (x) { return x.id === c.id; }), true);
     expectEqual(SUP.categoryOf(result.state, result.state.supplies[0]), 'other');
   });
+
+  // ======================================================================
+  section('v1.3 QC: Skip for now and carryover');
+
+  var R = window.HouseholdReview;
+  var MIRROR = 'bathroom-clean-mirror';
+  var TOILET = 'bathroom-clean-toilet';
+
+  function find(list, taskId, week) {
+    return list.filter(function (o) { return o.task.id === taskId && (!week || o.week === week); });
+  }
+
+  test('Skip for now keeps the chore unfinished and due this week', function () {
+    var state = freshState();
+    S.setDeferred(state, MIRROR, '2026-10-24', true);
+    var record = S.getRecord(state, MIRROR, '2026-10-24');
+    expectSame([record.deferred, record.status], [true, undefined]);
+    var occ = find(S.occurrencesForWeek(state, 'bathroom', '2026-10-24', '2026-10-26'), MIRROR)[0];
+    expectSame([occ.status, occ.deferred], ['due', true]);
+    expectEqual(S.progressOf(S.occurrencesForWeek(state, 'bathroom', '2026-10-24', '2026-10-26')).total, 5); // still counted
+  });
+
+  test('after the week ends, a skipped-for-now chore is overdue with its original week', function () {
+    var state = freshState();
+    S.setDeferred(state, MIRROR, '2026-10-24', true);
+    var overdue = find(S.overdueOccurrences(state, 'bathroom', '2026-11-02'), MIRROR);
+    expectEqual(overdue.length, 1);
+    expectSame([overdue[0].week, overdue[0].status, overdue[0].deferred], ['2026-10-24', 'overdue', true]);
+    var nov7 = find(S.occurrencesForWeek(state, 'bathroom', '2026-11-07', '2026-11-02'), MIRROR);
+    expectSame([nov7.length, nov7[0].deferred], [1, false]); // the next occurrence is separate
+  });
+
+  test('weekly: skipped and next week\'s occurrence stay separate; finishing one leaves the other', function () {
+    var state = freshState();
+    S.setDeferred(state, TOILET, '2026-10-24', true);
+    expectEqual(find(S.overdueOccurrences(state, 'bathroom', '2026-11-02'), TOILET).length, 1);
+    expectEqual(find(S.occurrencesForWeek(state, 'bathroom', '2026-10-31', '2026-11-02'), TOILET).length, 1);
+    S.toggleDone(state, TOILET, '2026-10-24', '2026-11-02'); // late completion
+    expectEqual(S.getRecord(state, TOILET, '2026-10-24').completedOn, '2026-11-02');
+    expectEqual(find(S.occurrencesForWeek(state, 'bathroom', '2026-10-31', '2026-11-02'), TOILET)[0].status, 'due');
+  });
+
+  test('a skipped-for-now chore is still unfinished in the week review', function () {
+    var state = freshState();
+    S.setDeferred(state, MIRROR, '2026-10-24', true);
+    var data = R.reviewData(state, '2026-10-24', '2026-10-30');
+    expectEqual(data.unfinishedItems.some(function (o) { return o.task.id === MIRROR; }), true);
+    expectEqual(data.scheduled, 25);
+  });
+
+  test('Undo Skip removes only the skip (and a move made after it)', function () {
+    var state = freshState();
+    S.setDeferred(state, MIRROR, '2026-10-24', true);
+    S.moveOccurrence(state, MIRROR, '2026-10-24', '2026-11-14', '2026-10-26');
+    S.setDeferred(state, MIRROR, '2026-10-24', false);
+    expectEqual(S.getRecord(state, MIRROR, '2026-10-24'), null);
+    S.setNote(state, TOILET, '2026-10-24', 'Busy');
+    S.setDeferred(state, TOILET, '2026-10-24', true);
+    S.setDeferred(state, TOILET, '2026-10-24', false);
+    expectEqual(S.getRecord(state, TOILET, '2026-10-24').note, 'Busy'); // the note stays
+  });
+
+  test('moved into a week with its own occurrence: both shown, finishing one leaves the other', function () {
+    var state = freshState();
+    S.setDeferred(state, TOILET, '2026-10-24', true);
+    S.moveOccurrence(state, TOILET, '2026-10-24', '2026-11-07', '2026-10-26');
+    var nov7 = find(S.occurrencesForWeek(state, 'bathroom', '2026-11-07', '2026-10-26'), TOILET);
+    expectEqual(nov7.map(function (o) { return o.week; }).sort(), ['2026-10-24', '2026-11-07']);
+    S.toggleDone(state, TOILET, '2026-10-24', '2026-11-08'); // finish the moved one
+    var after = find(S.occurrencesForWeek(state, 'bathroom', '2026-11-07', '2026-11-08'), TOILET);
+    expectEqual(after.filter(function (o) { return o.status === 'done'; }).length, 1);
+    expectEqual(after.filter(function (o) { return o.week === '2026-11-07'; })[0].status, 'due');
+  });
+
+  test('a moved chore is due in its new week and overdue only after that week passes', function () {
+    var state = freshState();
+    S.moveOccurrence(state, MIRROR, '2026-10-24', '2026-11-14', '2026-10-26');
+    expectEqual(find(S.overdueOccurrences(state, 'bathroom', '2026-11-09'), MIRROR, '2026-10-24').length, 0);
+    expectEqual(find(S.occurrencesForWeek(state, 'bathroom', '2026-11-14', '2026-11-16'), MIRROR, '2026-10-24')[0].status, 'due');
+    expectEqual(find(S.overdueOccurrences(state, 'bathroom', '2026-11-23'), MIRROR, '2026-10-24').length, 1);
+    expectEqual(find(S.movedOut(state, 'bathroom', '2026-10-24', '2026-10-26'), MIRROR).length, 1); // explained in its original week
+  });
+
+  test('notes belong to one occurrence: the next week starts empty, History keeps the old one', function () {
+    var state = freshState();
+    S.setNote(state, TOILET, '2026-10-24', 'Out of cleaner');
+    expectEqual(S.getRecord(state, TOILET, '2026-10-31'), null);
+    var oct31 = find(S.occurrencesForWeek(state, 'bathroom', '2026-10-31', '2026-11-02'), TOILET)[0];
+    expectEqual(oct31.record, null);
+    var history = S.weekHistory(state, '2026-10-24', '2026-11-02');
+    expectEqual(find(history.missed, TOILET)[0].record.note, 'Out of cleaner');
+  });
+
+  test('older "skipped" records are kept exactly and keep their old meaning', function () {
+    var state = freshState();
+    S.toggleSkip(state, MIRROR, '2026-10-24'); // saved the v1.2 way
+    var before = copy(state.records);
+    var loaded = H.loadState(fakeStorage({ 'householdReset.v2': JSON.stringify(state) }), '2026-11-02').state;
+    expectSame(loaded.records, before); // not rewritten
+    expectEqual(find(S.overdueOccurrences(loaded, 'bathroom', '2026-11-02'), MIRROR).length, 0); // still dismissed
+    S.toggleSkip(loaded, MIRROR, '2026-10-24'); // you choose "Undo skip (reopen)"
+    expectEqual(find(S.overdueOccurrences(loaded, 'bathroom', '2026-11-02'), MIRROR).length, 1);
+  });
+
+  test('Skip for now and moves survive a refresh and a backup; bad values are rejected', function () {
+    var state = freshState();
+    S.setDeferred(state, MIRROR, '2026-10-24', true);
+    S.moveOccurrence(state, MIRROR, '2026-10-24', '2026-11-14', '2026-10-26');
+    var storage = fakeStorage({});
+    H.saveState(storage, state);
+    var loaded = H.loadState(storage, '2026-10-27').state;
+    expectSame(loaded.records, state.records);
+    expectSame(H.validateBackup(JSON.stringify(H.createBackup(loaded, new Date())), '2026-10-28').state, loaded);
+    var bad = copy(state);
+    bad.records[MIRROR + '|2026-10-24'].deferred = 'yes';
+    expectEqual(H.validateState(bad).ok, false);
+  });
+
+  test('Heads up lists each skipped-for-now chore once, in the right group', function () {
+    var state = freshState();
+    S.setDeferred(state, MIRROR, '2026-10-24', true);
+    var now = S.headsUp(state, '2026-10-24', '2026-10-26');
+    expectEqual(find(now.groups[0].items, MIRROR).length, 1); // due group
+    var later = S.headsUp(state, '2026-10-31', '2026-11-02');
+    var overdue = later.groups.filter(function (g) { return g.kind === 'overdue'; })[0];
+    expectEqual(find(overdue.items, MIRROR).length, 1);
+  });
+
+  // ======================================================================
+  section('v1.3 QC: laundry put-away one and two weeks late');
+
+  test('one and two weeks late are both flagged; marking put away clears it', function () {
+    var x = bedding('2026-10-25');
+    var y = bedding('2026-10-17'); // two weeks before the Oct 31 week
+    expectEqual(W.overduePutAway(x.laundry, '2026-10-31').length, 1);
+    expectEqual(W.overduePutAway(y.laundry, '2026-10-31').length, 1);
+    expectEqual(W.overduePutAway(y.laundry, '2026-11-07').length, 1);
+    W.togglePutAway(y.laundry, y.load.id, '2026-11-08');
+    expectEqual(W.overduePutAway(y.laundry, '2026-11-07').length, 0);
+  });
+
+  test('looking ahead includes loads that would still be waiting; today\'s week does not', function () {
+    var x = bedding('2026-10-27'); // finished this week
+    expectEqual(W.overduePutAway(x.laundry, S.weekStart('2026-10-28')).length, 0); // not overdue today
+    expectEqual(W.overduePutAway(x.laundry, '2026-11-07').length, 1); // shown when viewing a future week
+    expectEqual(x.load.putAway, false); // viewing changes nothing
+  });
 })();
