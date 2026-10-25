@@ -1254,6 +1254,181 @@ select:focus-visible,
   cursor: pointer;
 }
 
+/* ---------- Supplies categories (version 1.3) ---------- */
+.supply-add-form select {
+  flex: 1 1 160px;
+}
+
+.supply-tab-msg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.supply-tab-msg:empty {
+  display: none;
+}
+
+.supply-msg.info {
+  color: var(--charcoal);
+}
+
+.supply-cat {
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+/* The category header you tap to open or close it */
+.supply-cat-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 8px 16px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.supply-cat-summary::-webkit-details-marker,
+.freq-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.supply-cat-summary::before,
+.freq-group-summary::before {
+  content: "▸";
+  color: var(--blush-deep);
+}
+
+.supply-cat[open] > .supply-cat-summary::before,
+.freq-group[open] > .freq-group-summary::before {
+  content: "▾";
+}
+
+.supply-cat-name {
+  flex: 1;
+}
+
+.supply-cat-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--charcoal-soft);
+}
+
+.supply-cat-summary:focus-visible,
+.freq-group-summary:focus-visible {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+.supply-cat .item-list {
+  margin: 0;
+  padding: 0 10px;
+}
+
+.supply-cat .item {
+  box-shadow: none;
+}
+
+.supply-note {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--charcoal-soft);
+  overflow-wrap: anywhere;
+}
+
+.supply-edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.supply-edit-form input[type="text"] {
+  flex: 1 1 200px;
+}
+
+.category-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 10px 10px;
+  border-top: 1px solid var(--line);
+}
+
+.category-rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.category-rename-form input[type="text"] {
+  flex: 1 1 160px;
+}
+
+.supply-row .category-select {
+  flex: 1 1 140px;
+}
+
+/* ---------- Room frequency groups (version 1.3) ---------- */
+.freq-group {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--f-line);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+.freq-group-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 6px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.freq-group-count {
+  font-weight: 600;
+  color: var(--charcoal-soft);
+}
+
+.freq-group .item-list {
+  margin: 0;
+  padding: 0 8px 4px;
+}
+
+.edit-heading {
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+
+/* ---------- Laundry put-away from earlier weeks (version 1.3) ---------- */
+.overdue-title {
+  color: var(--overdue-ink);
+}
+
+.load-overdue {
+  border-color: var(--overdue-line);
+  background: #fff7e8;
+}
+
+.badge.status-overdue.load-overdue-label {
+  display: inline-block;
+  margin: 0 0 8px;
+  white-space: normal;
+}
+
 /* ---------- Laundry ---------- */
 .laundry-stats {
   grid-template-columns: repeat(5, 1fr);
