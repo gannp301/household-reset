@@ -148,19 +148,22 @@
 
   // Adds a supply by name, or marks an existing one (same name, ignoring
   // capitals and spaces) as needed. Only called after an explicit tap.
-  // Returns { action: 'added' | 'marked', id, wasDone } or null for a blank name.
+  // Returns { action: 'added' | 'marked' | 'already', id, name, wasDone }, or
+  // null for a blank name. 'already' means it was already needed (no change).
   function addOrMarkSupply(state, name) {
     var clean = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
     if (!clean) return null;
     var existing = findSupply(state, clean);
+    if (existing && !existing.done) {
+      return { action: 'already', id: existing.id, name: existing.name, wasDone: false }; // already needed: nothing to change
+    }
     if (existing) {
-      var wasDone = existing.done;
       existing.done = false;
-      return { action: 'marked', id: existing.id, wasDone: wasDone };
+      return { action: 'marked', id: existing.id, name: existing.name, wasDone: true };
     }
     var item = L.createSupply(clean);
     state.supplies.push(item);
-    return { action: 'added', id: item.id, wasDone: false };
+    return { action: 'added', id: item.id, name: item.name, wasDone: false };
   }
 
   global.HouseholdPrep = {
