@@ -40,6 +40,7 @@
       reviews: {}, // "Finish Cleaning Week" reviews, one per week
       laundry: W.createLaundry(),
       supplies: starter.supplies,
+      supplyCategories: global.HouseholdSupplies.defaultCategories(), // version 1.3
       pets: starter.pets,
       legacy: v1Data ? { archivedOn: today, chores: v1Data.chores, history: v1Data.history } : null
     };
@@ -238,6 +239,43 @@
     return copy;
   }
 
+  // Version 1.3 supply categories. Older data has none: it gets the default
+  // list. "Other" is always kept (and added back if missing).
+  function checkSupplyCategories(list) {
+    if (list === undefined) return global.HouseholdSupplies.defaultCategories();
+    var copies = checkList(list, function (c) {
+      var name = typeof c.name === 'string' ? c.name.replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+      return isId(c.id) && name ? { id: c.id, name: name } : null;
+    });
+    if (!copies || !allUnique(copies)) return null;
+    if (!copies.some(function (c) { return c.id === 'other'; })) copies.push({ id: 'other', name: 'Other' });
+    return copies;
+  }
+
+  // Keeps the version 1.3 extras on each supply (the version 1.1 checker
+  // removes fields it doesn't know). `checked` is the already-checked list.
+  //  - category: kept if it names an existing category ("other" = no field)
+  //  - note: optional short text
+  function checkSupplyExtras(original, checked, categories) {
+    var ids = categories.map(function (c) { return c.id; });
+    var out = [];
+    for (var i = 0; i < checked.length; i++) {
+      var item = original[i];
+      var copy = { id: checked[i].id, name: checked[i].name, done: checked[i].done };
+      if (item.category !== undefined) {
+        if (typeof item.category !== 'string') return null;
+        if (item.category !== 'other' && ids.indexOf(item.category) > -1) copy.category = item.category;
+      }
+      if (item.note !== undefined) {
+        if (typeof item.note !== 'string') return null;
+        var note = item.note.replace(/\s+/g, ' ').trim().slice(0, 300);
+        if (note) copy.note = note;
+      }
+      out.push(copy);
+    }
+    return out;
+  }
+
   // Optional "Finish Cleaning Week" reviews. Missing in older data = {}.
   function checkReviews(reviews) {
     if (reviews === undefined) return {};
@@ -384,6 +422,10 @@
     if (!laundry) return fail('laundry loads');
     var lists = checkV1Data({ chores: [], supplies: data.supplies, pets: data.pets, history: {} });
     if (!lists) return fail('supplies or cat-care lists');
+    var supplyCategories = checkSupplyCategories(data.supplyCategories);
+    if (!supplyCategories) return fail('supply categories');
+    var supplies = checkSupplyExtras(data.supplies, lists.supplies, supplyCategories);
+    if (!supplies) return fail('supplies or cat-care lists');
     var legacy = checkLegacy(data.legacy);
     if (legacy === false) return fail('version 1.1 archive');
     var prep = checkPrep(data.prep);
@@ -403,7 +445,8 @@
         prep: prep,
         reviews: reviews,
         laundry: laundry,
-        supplies: lists.supplies,
+        supplies: supplies,
+        supplyCategories: supplyCategories,
         pets: lists.pets,
         legacy: legacy
       }
