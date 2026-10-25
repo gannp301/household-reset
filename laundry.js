@@ -228,6 +228,20 @@
     };
   }
 
+  // One short status line for the Laundry room: what needs putting away
+  // first, then what's still moving. Laundry is a workflow, not a scheduled
+  // chore, so this replaces the "N of M done" percentage. "Nothing needs
+  // putting away" never hides loads that are waiting, washing, or drying.
+  function statusLine(laundry) {
+    var c = counts(laundry);
+    var parts = [c.needPutAway ? c.needPutAway + (c.needPutAway === 1 ? ' load' : ' loads') + ' to put away'
+      : 'Nothing needs putting away'];
+    if (c.waiting) parts.push(c.waiting + ' waiting');
+    if (c.inWasher) parts.push(c.inWasher + ' washing');
+    if (c.inDryer) parts.push(c.inDryer + ' drying');
+    return parts.join(' · ');
+  }
+
   global.HouseholdLaundry = {
     STAGES: STAGES,
     STAGE_LABELS: STAGE_LABELS,
@@ -246,6 +260,7 @@
     loadsNeedingPutAway: loadsNeedingPutAway,
     overduePutAway: overduePutAway,
     finishedBetween: finishedBetween,
-    counts: counts
+    counts: counts,
+    statusLine: statusLine
   };
 })(typeof window !== 'undefined' ? window : globalThis);
