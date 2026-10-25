@@ -10,28 +10,56 @@
     #summary { font-size: 1.2rem; font-weight: 700; padding: 12px 16px; border-radius: 12px; }
     #summary.pass { background: #dcefdc; }
     #summary.fail { background: #f6d2d2; }
+    h2 { font-size: 1.1rem; margin: 24px 0 4px; }
     li { padding: 6px 0; }
     .pass::marker { content: "✅ "; }
     .fail::marker { content: "❌ "; }
+    .manual { background: #fffdf9; border: 1px solid #eadccf; border-radius: 12px; padding: 4px 16px 12px; margin-top: 28px; }
+    .manual li::marker { content: "☐ "; }
   </style>
 </head>
 <body>
   <h1>Household Reset — self-tests</h1>
-  <p>This page checks the rules in <code>logic.js</code>. It does not touch your saved data.</p>
+  <p>
+    This page automatically checks the app's rules: dates, room schedules, laundry, upgrading from
+    version 1.1, and backups. It uses made-up sample data and <strong>does not read or change your saved lists</strong>.
+  </p>
   <p id="summary">Running…</p>
-  <ul id="results"></ul>
+  <div id="results"></div>
+
+  <section class="manual">
+    <h2>Manual checks (not automatic — try these yourself in Safari)</h2>
+    <p>The automatic tests above can't tap buttons on your iPad. These still need a person:</p>
+    <ul>
+      <li>Download a backup in the app and find it in the Files app → Downloads.</li>
+      <li>Restore that file: check the confirmation message, tap Cancel, then restore for real.</li>
+      <li>Open a room, tick a chore, reload the page, and check it's still ticked.</li>
+      <li>Use ‹ and › to visit other weeks, then tap "This week" to come back.</li>
+      <li>Move a laundry load through all four steps, then mark it put away.</li>
+      <li>Check every button is easy to tap and the text is easy to read.</li>
+    </ul>
+  </section>
 
   <script src="logic.js"></script>
+  <script src="schedule.js"></script>
+  <script src="laundry.js"></script>
+  <script src="storage.js"></script>
   <script>
     var L = window.HouseholdLogic;
     var results = [];
+    var currentSection = 'Version 1.0 & 1.1 basics';
+
+    // Starts a new group of tests with a heading on the page.
+    function section(name) {
+      currentSection = name;
+    }
 
     function test(name, fn) {
       try {
         fn();
-        results.push({ name: name, ok: true });
+        results.push({ section: currentSection, name: name, ok: true });
       } catch (err) {
-        results.push({ name: name, ok: false, message: err.message });
+        results.push({ section: currentSection, name: name, ok: false, message: err.message });
       }
     }
 
@@ -174,6 +202,7 @@
     });
 
     // ---------- Backup & Restore ----------
+    section('Version 1.1 backup basics');
 
     // Builds a backup file's text from some state, like the Download button does.
     function backupText(state, when) {
@@ -302,20 +331,38 @@
       expectEqual(reloaded, restored);
     });
 
-    // Show the results on the page.
-    var list = document.getElementById('results');
-    results.forEach(function (r) {
-      var li = document.createElement('li');
-      li.className = r.ok ? 'pass' : 'fail';
-      li.textContent = r.name + (r.ok ? '' : ' — ' + r.message);
-      list.appendChild(li);
-    });
-    var failed = results.filter(function (r) { return !r.ok; }).length;
-    var summary = document.getElementById('summary');
-    summary.className = failed ? 'fail' : 'pass';
-    summary.textContent = failed
-      ? failed + ' of ' + results.length + ' tests failed'
-      : 'All ' + results.length + ' tests passed';
+    // Shows the results on the page, grouped by section.
+    function showResults() {
+      var container = document.getElementById('results');
+      var list = null;
+      var lastSection = null;
+      results.forEach(function (r) {
+        if (r.section !== lastSection) {
+          lastSection = r.section;
+          var inSection = results.filter(function (x) { return x.section === r.section; });
+          var passed = inSection.filter(function (x) { return x.ok; }).length;
+          var heading = document.createElement('h2');
+          heading.textContent = r.section + ' (' + passed + ' of ' + inSection.length + ' passed)';
+          container.appendChild(heading);
+          list = document.createElement('ul');
+          container.appendChild(list);
+        }
+        var li = document.createElement('li');
+        li.className = r.ok ? 'pass' : 'fail';
+        li.textContent = r.name + (r.ok ? '' : ' — ' + r.message);
+        list.appendChild(li);
+      });
+      var failed = results.filter(function (r) { return !r.ok; }).length;
+      var summary = document.getElementById('summary');
+      summary.className = failed ? 'fail' : 'pass';
+      summary.textContent = failed
+        ? failed + ' of ' + results.length + ' automatic tests failed'
+        : 'All ' + results.length + ' automatic tests passed';
+    }
+  </script>
+  <script src="tests-v1-2.js"></script>
+  <script>
+    showResults();
   </script>
 </body>
 </html>
