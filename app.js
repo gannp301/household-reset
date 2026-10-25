@@ -17,7 +17,11 @@
   var H = window.HouseholdStorage;
 
   var state = null;
-  var canSave = true;
+  // 'ok'          saving normally
+  // 'paused'      saved data is damaged: nothing is saved until you choose what to do
+  // 'unavailable' this browser's storage can't be read or used: nothing is saved
+  var storageMode = 'ok';
+  var loadResult = null;
 
   // Screen-only settings. These are never saved.
   var selectedWeek = null; // the cleaning week being looked at
@@ -49,20 +53,24 @@
 
   function load() {
     var storage = getStorage();
-    var result = storage
+    loadResult = storage
       ? H.loadState(storage, today())
-      : { state: H.createState(today(), null), source: 'new', canSave: false };
-    state = result.state;
-    canSave = result.canSave;
-    if (!canSave) showStorageWarning();
-    if (result.source === 'migrated' || result.damagedCopy) showUpgradeNotice(result);
+      : { state: H.createState(today(), null), source: 'unreadable', canSave: false };
+    state = loadResult.state;
+    storageMode = loadResult.canSave ? 'ok' : loadResult.needsDecision ? 'paused' : 'unavailable';
+    if (storageMode === 'unavailable') showUnavailableNotice();
+    else if (storageMode === 'paused') showRecoveryNotice(loadResult);
+    else if (loadResult.source === 'migrated') showUpgradeNotice();
     save();
   }
 
+  // Saves the current data. Returns true only if it really was saved.
   function save() {
-    if (!canSave) return;
+    if (storageMode !== 'ok') return false;
     var storage = getStorage();
-    if (!storage || !H.saveState(storage, state)) showStorageWarning();
+    var ok = !!storage && H.saveState(storage, state);
+    if (!ok) showStorageWarning();
+    return ok;
   }
 
   function showStorageWarning() {
@@ -75,24 +83,71 @@
     }
   }
 
-  function showUpgradeNotice(result) {
-    if (result.source !== 'migrated') {
-      // Damaged version 1.2 data and no version 1.1 data to fall back on.
-      document.getElementById('app-notice-text').textContent =
-        'Your saved data in this browser was damaged and could not be used, so the app started fresh. ' +
-        'A safety copy of the damaged data was kept. To get your lists back, use Restore from backup below.';
-      document.getElementById('app-notice').hidden = false;
-      return;
-    }
-    var text = result.problem
-      ? 'Welcome to version 1.2! Your version 1.1 data could not be read, so the app started fresh. ' +
-        'The old data is still stored, untouched, in this browser.'
-      : 'Welcome to version 1.2! Your supplies, cat-care list, and old chore history were kept. ' +
-        'The old weekly chore list is saved in History → Version 1.1 archive, and room chores start fresh from this week. ' +
-        'Your version 1.1 data is also still stored, untouched, in this browser.';
-    if (result.damagedCopy) text += ' (Damaged version 1.2 data was found, and a safety copy was kept.)';
+  // Shows the message box at the top of the Rooms tab, with optional buttons.
+  function showNotice(text, actions, canClose) {
     document.getElementById('app-notice-text').textContent = text;
+    var box = document.getElementById('app-notice-actions');
+    box.textContent = '';
+    (actions || []).forEach(function (a) {
+      var btn = el('button', 'btn ' + a.className, a.label);
+      btn.type = 'button';
+      btn.addEventListener('click', a.onClick);
+      box.appendChild(btn);
+    });
+    document.getElementById('app-notice-close').hidden = !canClose;
     document.getElementById('app-notice').hidden = false;
+  }
+
+  function hideNotice() {
+    document.getElementById('app-notice').hidden = true;
+  }
+
+  function showUpgradeNotice() {
+    showNotice('Welcome to version 1.2! Your supplies, cat-care list, and old chore history were kept. ' +
+      'The old weekly chore list is saved in History → Version 1.1 archive, and room chores start fresh from this week. ' +
+      'Your version 1.1 data is also still stored, untouched, in this browser.', [], true);
+  }
+
+  function showUnavailableNotice() {
+    showStorageWarning();
+    showNotice('Household Reset couldn\'t read this browser\'s saved data, so it isn\'t saving anything right now. ' +
+      'That way nothing already stored can be overwritten. Your saved data has not been changed. ' +
+      'Try closing and reopening Safari. If you\'re in Private Browsing, switch to a normal tab.', [], false);
+  }
+
+  // Saved data is damaged. Nothing is saved until you pick one of these.
+  function showRecoveryNotice(result) {
+    var what = result.problem
+      ? 'Your version 1.1 data in this browser is damaged and couldn\'t be upgraded.'
+      : 'Your saved version 1.2 data in this browser is damaged and couldn\'t be opened.';
+    var kept = result.damagedCopy
+      ? ' A safety copy of the damaged data was kept, and your other saved data hasn\'t been changed.'
+      : ' It has not been changed or deleted.';
+    var continueLabel = result.problem || !loadResult.state.legacy ? 'Start fresh' : 'Use my version 1.1 lists';
+    showNotice(what + kept + ' Nothing will be saved until you choose: restore a backup file, ' +
+      'download a copy of the old data to keep, or ' + continueLabel.toLowerCase() + '.', [
+      { label: 'Restore from a backup', className: 'btn-primary', onClick: function () {
+        document.getElementById('restore-file').click();
+      } },
+      { label: 'Download the old data', className: 'btn-quiet', onClick: downloadOldData },
+      { label: continueLabel, className: 'btn-quiet', onClick: function () {
+        if (!window.confirm(continueLabel + '? The damaged data stays stored in this browser, but the app will stop using it.')) return;
+        storageMode = 'ok';
+        if (save()) hideNotice();
+        render();
+      } }
+    ], false);
+  }
+
+  function downloadOldData() {
+    var storage = getStorage();
+    var raw = storage ? H.rawSavedData(storage) : {};
+    var file = {
+      note: 'Raw Household Reset data copied from this browser, exactly as stored (it may be damaged).',
+      copiedAt: new Date().toISOString(),
+      data: raw
+    };
+    downloadFile('household-reset-old-data-' + today() + '.json', JSON.stringify(file, null, 2));
   }
 
   // ---------- Small helpers for building the page ----------
@@ -202,11 +257,15 @@
 
   // ---------- Rooms home: reminders, room cards, upcoming ----------
 
+  // Reminders always describe the CURRENT week (based on today's date), even
+  // when the week navigator above is showing a different week.
   function renderReminders() {
     var box = document.getElementById('reminders');
     box.textContent = '';
     var cw = currentWeek();
     var t = today();
+    document.getElementById('reminders-scope').textContent = 'Based on today: ' + S.formatWeekRange(cw) + '.' +
+      (selectedWeek !== cw ? ' You\'re viewing a different week above; these reminders stay on the current week.' : '');
     var overdue = S.overdueOccurrences(state, null, t);
     var dueNow = S.occurrencesForWeek(state, null, cw, t).filter(function (o) {
       return o.status === 'due' && o.task.frequency !== 'weekly';
@@ -652,6 +711,8 @@
     var c = W.counts(state.laundry);
 
     var board = sectionBlock('Laundry loads', 'One washer and one dryer. A load counts as finished once it\'s out of the dryer.');
+    board.appendChild(el('p', 'hint counts-scope', 'On the board now. Started = in the washer, dryer, or finished. ' +
+      'Moved to dryer = in the dryer or finished. Clearing put-away loads removes them from these counts; they stay in History.'));
     var stats = el('div', 'stats laundry-stats');
     [['Waiting', c.waiting], ['Started', c.started], ['Moved to dryer', c.movedToDryer], ['Finished', c.finished], ['To put away', c.needPutAway]]
       .forEach(function (s) {
@@ -661,6 +722,10 @@
         stats.appendChild(tile);
       });
     board.appendChild(stats);
+    var cw = currentWeek();
+    var weekTotal = W.finishedBetween(state.laundry, cw, S.weekEnd(cw));
+    board.appendChild(el('p', 'week-laundry-total', 'Finished this cleaning week: ' + count(weekTotal, 'load', 'loads') +
+      ' (including loads already cleared from the board).'));
 
     var machines = el('div', 'machines');
     ['washer', 'dryer'].forEach(function (machine) {
@@ -1173,18 +1238,22 @@
   }
 
   // Turns all saved data into a .json file and asks the browser to download it.
-  function downloadBackup() {
-    var now = new Date();
-    var text = JSON.stringify(H.createBackup(state, now), null, 2);
+  // Asks the browser to download some text as a file.
+  function downloadFile(fileName, text) {
     var blob = new Blob([text], { type: 'application/json' });
     var link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = L.backupFileName(now);
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     link.remove();
     setTimeout(function () { URL.revokeObjectURL(link.href); }, 10000);
-    setBackupStatus('Backup created: ' + link.download +
+  }
+
+  function downloadBackup() {
+    var now = new Date();
+    downloadFile(L.backupFileName(now), JSON.stringify(H.createBackup(state, now), null, 2));
+    setBackupStatus('Backup created: ' + L.backupFileName(now) +
       '. On iPad, you can find it in the Files app under Downloads.', 'success');
   }
 
@@ -1202,12 +1271,31 @@
   function restoreSummary(s) {
     if (s.kind === 'v1') {
       var a = s.added;
-      return 'This is a version 1.1 backup from ' + formatBackupDate(s.exportedAt) + '. Restoring it will:\n' +
+      var text = 'This is a version 1.1 backup from ' + formatBackupDate(s.exportedAt) + '. Restoring it will:\n' +
         '• Replace your Supplies with its ' + count(s.supplies, 'item', 'items') + ' and your Cats list with its ' +
         count(s.pets, 'task', 'tasks') + '.\n' +
         '• Add ' + count(a.weeks, 'week', 'weeks') + ' of old chore history and ' + count(a.chores, 'old chore', 'old chores') +
-        ' to History → Version 1.1 archive' + (a.keptWeeks ? ' (' + count(a.keptWeeks, 'week is', 'weeks are') + ' already there and stay as they are)' : '') + '.\n' +
-        '• Keep your room chores, schedules, completion history, and laundry loads exactly as they are.';
+        ' to History → Version 1.1 archive.\n';
+      if (a.identicalWeeks || a.identicalChores) {
+        text += '• Skip ' + count(a.identicalWeeks, 'week', 'weeks') + ' and ' + count(a.identicalChores, 'chore', 'chores') +
+          ' that are already archived exactly as in the backup.\n';
+      }
+      if (a.conflictWeeks.length || a.conflictChores.length) {
+        var parts = [];
+        if (a.conflictWeeks.length) {
+          parts.push(count(a.conflictWeeks.length, 'week', 'weeks') + ' (' + a.conflictWeeks.map(function (c) {
+            return 'week of ' + formatDay(c.weekStart);
+          }).join(', ') + ')');
+        }
+        if (a.conflictChores.length) {
+          parts.push(count(a.conflictChores.length, 'chore', 'chores') + ' (' + a.conflictChores.map(function (c) {
+            return '"' + c.archivedName + '"';
+          }).join(', ') + ')');
+        }
+        text += '• Keep your archived version of ' + parts.join(' and ') +
+          ', which differ in the backup. The backup\'s versions of those are not imported.\n';
+      }
+      return text + '• Keep your room chores, schedules, completion history, and laundry loads exactly as they are.';
     }
     return 'This backup is from ' + formatBackupDate(s.exportedAt) + ' and has ' +
       count(s.tasks, 'room chore', 'room chores') + ', ' + count(s.completions, 'completion', 'completions') + ', ' +
@@ -1262,17 +1350,26 @@
       setBackupStatus(result.error + ' Nothing was changed.', 'error');
       return;
     }
+    hideRestoreConfirm();
+    // Save FIRST. Only switch to the restored data if saving worked, so a
+    // failure leaves both the screen and the saved data exactly as they were.
+    var storage = getStorage();
+    if (storageMode === 'unavailable' || !storage || !H.saveState(storage, result.state)) {
+      setBackupStatus('The backup could not be saved in this browser (storage may be full, blocked, or unreadable). ' +
+        'Nothing was changed: your previous data is still in place.', 'error');
+      return;
+    }
     state = result.state;
+    storageMode = 'ok';
+    hideNotice();
     editing = null;
     editingTask = null;
     editingLoad = null;
     expanded = null;
     openRoom = null;
     selectedWeek = currentWeek();
-    hideRestoreConfirm();
-    save();
     render();
-    setBackupStatus('Your data was restored from the backup.', 'success');
+    setBackupStatus('Your data was restored from the backup and saved.', 'success');
   }
 
   // ---------- Starting up ----------
