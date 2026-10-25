@@ -335,7 +335,7 @@
 
   // Deletes a record that no longer says anything (not done, skipped, or moved).
   function tidyRecord(state, record) {
-    if (!record.status && !record.movedTo && !record.note) delete state.records[recordKey(record.taskId, record.week)];
+    if (!record.status && !record.movedTo && !record.note && !record.deferred) delete state.records[recordKey(record.taskId, record.week)];
   }
 
   // A short note on one chore occurrence ("I didn't have trash bags").
@@ -388,7 +388,8 @@
       week: week, // the week it was originally scheduled
       effectiveWeek: effective, // the week it shows up in (after any move)
       record: record,
-      status: statusOf(record, effective, currentWeek)
+      status: statusOf(record, effective, currentWeek),
+      deferred: !!(record && record.deferred) // "Skip for now": still unfinished
     };
   }
 
@@ -480,6 +481,40 @@
     }
     tidyRecord(state, record);
     return true;
+  }
+
+  // "Skip for now" (version 1.3): a note to yourself that you're not doing
+  // this occurrence right now. It does NOT finish or dismiss it: it stays
+  // unfinished, so it's due this week and overdue once its week ends.
+  // Turning it off ("Undo Skip") also undoes a move made after skipping.
+  // Older "skipped" records (status 'skipped', which meant "dismissed") are
+  // never changed by this; see toggleSkip.
+  function setDeferred(state, taskId, week, on) {
+    var task = findTask(state, taskId);
+    if (!task) return false;
+    var record = ensureRecord(state, task, week);
+    if (on) {
+      record.deferred = true;
+    } else {
+      delete record.deferred;
+      delete record.movedTo;
+    }
+    tidyRecord(state, record);
+    return true;
+  }
+
+  // Occurrences scheduled in `week` that were moved to a different week.
+  // Shown in their original week only to explain where they went.
+  function movedOut(state, roomId, week, today) {
+    var currentWeek = weekStart(today);
+    var list = [];
+    Object.keys(state.records).forEach(function (key) {
+      var r = state.records[key];
+      if (r.week !== week || !r.movedTo || r.movedTo === week) return;
+      var task = findTask(state, r.taskId);
+      if (task && (!roomId || task.room === roomId)) list.push(makeOccurrence(task, r.week, r, currentWeek));
+    });
+    return list;
   }
 
   // Move one chore occurrence to another week (this week or later).
@@ -700,6 +735,8 @@
     formatWeekRange: formatWeekRange,
     formatRangeShort: formatRangeShort,
     setNote: setNote,
+    setDeferred: setDeferred,
+    movedOut: movedOut,
     setDone: setDone,
     setOpen: setOpen,
     openBefore: openBefore,
