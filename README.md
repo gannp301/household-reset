@@ -63,6 +63,7 @@ Changing how often a chore repeats starts its new schedule from the current week
 - Doing a chore late **doesn't shift its schedule**. An every-2-weeks chore stays on its rotation.
 - Back from a trip? **Skip all overdue in this room** clears a room in one tap, after asking first. Skipped chores are recorded as skipped, not done.
 - **As-needed** chores are never overdue.
+- The **Reminders** card always shows the **current** week (based on today's date), even when you're viewing a different week with ‹ and ›. The card says so when that happens.
 - Reminders appear **inside the app only**. Household Reset can't send phone notifications.
 
 ## Laundry tracking
@@ -77,7 +78,7 @@ Open the **Laundry** room card.
 6. A load counts as **finished as soon as it's out of the dryer**, whether or not it's folded.
 7. **Put away laundry** lists finished loads still to be put away. Tap **Mark put away** on each one. This doesn't change its finished status. **Clear put-away loads** tidies the board; cleared loads are kept in History and backups.
 
-The counters at the top show how many loads are **waiting**, **started**, **moved to the dryer**, **finished**, and **still to put away**.
+The counters at the top describe the loads **on the board right now**: **waiting**, **started** (in the washer, dryer, or finished), **moved to the dryer** (in the dryer or finished), **finished**, and **still to put away**. When you clear put-away loads, they leave the board, so these counters go down. Below them, **Finished this cleaning week** counts every load finished since Saturday, *including* loads you've already cleared, so that number never drops when you tidy up.
 
 Laundry and room chores are tracked separately. Finishing a bedding or towel load does **not** tick off "Strip bedding & wash sheets/comforter", "Wash kitchen towels", or "Wash throw blankets". Tick those yourself.
 
@@ -108,7 +109,11 @@ How it keeps your data safe:
 - Version 1.2 saves under a **new storage name** (`householdReset.v2`). Version 1.1's data (`householdReset.v1`) is only read, **never changed or deleted**, so it's still there if anything goes wrong.
 - The upgrade happens **only once**. Opening or refreshing the app again uses the version 1.2 data and never re-copies anything.
 - The new data is built completely in memory and saved in one step, so an interrupted upgrade can't leave half-saved data.
-- If the old data can't be read, the app explains that and starts fresh, and the old data still stays untouched.
+- **If the old data is damaged**, the app does **not** start fresh by itself. It shows a message and saves nothing until you choose one of these:
+  - **Restore from a backup**: pick a backup file.
+  - **Download the old data**: saves an exact copy of what's stored, damaged or not, so you can keep it or share it for help.
+  - **Start fresh** (or **Use my version 1.1 lists**, if only the version 1.2 data is damaged): asks you to confirm first. The damaged data stays stored.
+- **If the browser can't read its storage at all**, the app saves nothing that session, so it can't overwrite data it couldn't see. Try closing and reopening Safari, and don't use Private Browsing.
 
 A message at the top of the Rooms tab tells you when the upgrade has happened. **Recommended:** before the update goes live, open the current app and tap **Download backup**, so you have your own copy as well.
 
@@ -146,6 +151,10 @@ Version 1.1 backup files still work. A 1.1 backup only contains supplies, cat ca
 | Laundry loads | **Kept** exactly as they are. |
 
 The confirmation box lists exactly what will be replaced, added, and kept before anything changes. Restoring the same 1.1 backup twice changes nothing the second time.
+
+If the backup has a **different version** of a week or chore that's already in your archive (a "conflict"), the box names it, for example "Keep your archived version of 1 week (week of Oct 12, 2026)". Your archived version is always kept, and the backup's version of that item isn't imported.
+
+**A restore only counts once it's saved.** If Safari can't save it (for example, storage is full), you'll see a red message and your previous data stays exactly as it was, both on screen and in storage.
 
 A **version 1.2** backup is different: it contains everything, so restoring it replaces everything, including laundry loads. Its confirmation box says so.
 
