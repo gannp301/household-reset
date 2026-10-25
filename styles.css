@@ -1119,8 +1119,7 @@ select:focus-visible,
   outline-offset: 2px;
 }
 
-.review-note,
-.review-supply-input {
+.review-note {
   width: 100%;
 }
 
@@ -1146,6 +1145,113 @@ select:focus-visible,
 
 .supply-status {
   margin: 6px 0 0;
+}
+
+/* ---------- Add needed supply ---------- */
+.supply-adder {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--cream);
+}
+
+.supply-adder-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.suggested-label {
+  font-size: 0.85rem;
+  color: var(--charcoal-soft);
+}
+
+.supply-suggestions {
+  align-items: center;
+}
+
+.supply-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.supply-row .supply-name {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.supply-msg {
+  margin: 6px 0 0;
+  font-weight: 600;
+}
+
+.supply-msg:empty {
+  display: none;
+}
+
+.supply-msg.success {
+  color: var(--weekly-ink);
+}
+
+.supply-msg.error {
+  color: var(--danger);
+}
+
+/* ---------- Week review: room selector and All done ---------- */
+.review-rooms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 6px;
+}
+
+.room-pill {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--charcoal);
+  font-size: 0.95rem;
+}
+
+.room-pill[aria-pressed="true"] {
+  border-color: var(--blush-deep);
+  background: var(--blush);
+  font-weight: 700;
+}
+
+.room-pill-done {
+  background: var(--weekly-bg);
+  color: var(--weekly-ink);
+}
+
+.review-reviewing {
+  margin: 10px 0 4px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.all-done {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--weekly-bg);
+  color: var(--weekly-ink);
+  font-weight: 600;
+}
+
+.reviewed-done {
+  margin-top: 10px;
+}
+
+.reviewed-done > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 600;
+  color: var(--charcoal-soft);
+  cursor: pointer;
 }
 
 /* ---------- Laundry ---------- */
@@ -1318,7 +1424,8 @@ select:focus-visible,
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .laundry-stats {
+  .laundry-stats,
+  .review-stats {
     grid-template-columns: repeat(3, 1fr);
   }
 
