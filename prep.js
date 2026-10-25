@@ -110,9 +110,14 @@
     return true;
   }
 
-  // Undo an answer so the question shows again. Supplies it added are removed
-  // (if still there, and no other answer relies on them) and supplies it
-  // marked as needed get their old tick back.
+  // Undo an answer so the question shows again. It only reverses its own
+  // changes, and only if you haven't changed those items since:
+  //  - an item it added is removed only if it's still unticked (as added) and
+  //    no other answer relies on it;
+  //  - an item it marked as needed gets its old tick back only if it's still
+  //    unticked.
+  // Anything you changed on the Supplies tab afterwards is left alone and
+  // listed in `kept`, so the app can say so. Returns false if there was no answer.
   function undoAnswer(state, key) {
     var record = state.prep[key];
     if (!record) return false;
@@ -122,15 +127,40 @@
       state.prep[other].added.forEach(function (id) { usedElsewhere[id] = true; });
       state.prep[other].marked.forEach(function (m) { usedElsewhere[m.id] = true; });
     });
+    var kept = [];
     state.supplies = state.supplies.filter(function (s) {
-      return record.added.indexOf(s.id) === -1 || usedElsewhere[s.id];
+      if (record.added.indexOf(s.id) === -1 || usedElsewhere[s.id]) return true;
+      if (s.done) {
+        kept.push(s.name); // you've ticked it since: keep it
+        return true;
+      }
+      return false;
     });
     record.marked.forEach(function (m) {
       var supply = state.supplies.filter(function (s) { return s.id === m.id; })[0];
-      if (supply) supply.done = m.wasDone;
+      if (!supply) return;
+      if (supply.done) kept.push(supply.name); // you've changed it since: leave it
+      else supply.done = m.wasDone;
     });
     delete state.prep[key];
-    return true;
+    return { undone: true, kept: kept };
+  }
+
+  // Adds a supply by name, or marks an existing one (same name, ignoring
+  // capitals and spaces) as needed. Only called after an explicit tap.
+  // Returns { action: 'added' | 'marked', id, wasDone } or null for a blank name.
+  function addOrMarkSupply(state, name) {
+    var clean = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (!clean) return null;
+    var existing = findSupply(state, clean);
+    if (existing) {
+      var wasDone = existing.done;
+      existing.done = false;
+      return { action: 'marked', id: existing.id, wasDone: wasDone };
+    }
+    var item = L.createSupply(clean);
+    state.supplies.push(item);
+    return { action: 'added', id: item.id, wasDone: false };
   }
 
   global.HouseholdPrep = {
@@ -141,6 +171,7 @@
     addAction: addAction,
     answerStocked: answerStocked,
     addToSupplies: addToSupplies,
-    undoAnswer: undoAnswer
+    undoAnswer: undoAnswer,
+    addOrMarkSupply: addOrMarkSupply
   };
 })(typeof window !== 'undefined' ? window : globalThis);
