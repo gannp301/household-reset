@@ -93,6 +93,38 @@
     </section>
   </main>
 
+  <!-- Backup & Restore (shown under every tab) -->
+  <section class="backup-area" aria-labelledby="backup-title">
+    <div class="card backup-card">
+      <h2 id="backup-title">Backup &amp; Restore</h2>
+      <p class="hint">
+        Save a copy of all your chores, weekly history, supplies, and cat-care lists as a file.
+        Use it to recover your lists, or to move them to another device.
+      </p>
+
+      <div class="backup-actions">
+        <button type="button" class="btn btn-primary" id="download-backup">Download backup</button>
+        <input type="file" id="restore-file" class="visually-hidden" accept=".json,application/json">
+        <label for="restore-file" class="btn btn-quiet file-button">Restore from backup…</label>
+      </div>
+
+      <div class="restore-confirm" id="restore-confirm" role="group" aria-labelledby="restore-title" hidden>
+        <p class="restore-title" id="restore-title">Replace your current data?</p>
+        <p id="restore-summary"></p>
+        <p>
+          Restoring will <strong>replace everything currently saved</strong> in this browser.
+          If you want to keep it, tap Cancel and download a backup first.
+        </p>
+        <div class="backup-actions">
+          <button type="button" class="btn btn-warning" id="confirm-restore">Replace my data</button>
+          <button type="button" class="btn btn-quiet" id="cancel-restore">Cancel</button>
+        </div>
+      </div>
+
+      <p class="backup-status" id="backup-status" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+
   <footer class="app-footer">
     <p>
       <strong>Where is my data?</strong> Everything is saved only in this browser on this device
