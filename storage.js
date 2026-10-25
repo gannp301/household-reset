@@ -88,39 +88,80 @@
     }
   }
 
-  // Works out which data to use when the app opens. It saves nothing itself,
-  // except a safety copy of damaged version 1.2 data before replacing it.
-  // Returns { state, source, canSave, problem, damagedCopy }.
-  //   source: 'saved' (normal), 'migrated' (upgraded from 1.1), 'new' (first visit)
+  // Keeps a copy of damaged version 1.2 data under a separate name, without
+  // overwriting an earlier, different safety copy. Returns true if it's safe.
+  function keepDamagedCopy(storage, text, today) {
+    var key = KEY_V2 + '.damaged';
+    var existing = read(storage, key);
+    if (existing.error) return false;
+    if (existing.text === text) return true;
+    if (existing.text !== null) key += '.' + today;
+    try {
+      storage.setItem(key, text);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // Works out which data to use when the app opens. Returns
+  // { state, source, canSave, needsDecision, problem, damagedCopy }.
+  //   source 'saved'      normal: version 1.2 data loaded
+  //          'migrated'   version 1.1 data upgraded (the app saves it)
+  //          'new'        first visit, nothing saved yet
+  //          'unreadable' storage couldn't be read (or protected): canSave is
+  //                       false, so nothing is written over data we couldn't see
+  //          'damaged'    saved data is damaged: canSave is false and
+  //                       needsDecision is true. `state` is only a stand-in
+  //                       until you restore a backup or choose to start over.
+  // The only thing it ever writes is a safety copy of damaged 1.2 data.
   function loadState(storage, today) {
+    function unreadable(damagedCopy) {
+      return { state: createState(today, null), source: 'unreadable', canSave: false, damagedCopy: !!damagedCopy };
+    }
+
     var v2 = read(storage, KEY_V2);
-    if (v2.error) return { state: createState(today, null), source: 'new', canSave: false };
+    if (v2.error) return unreadable(false);
 
     var damagedCopy = false;
     if (v2.text !== null) {
       var checked = validateState(parseJSON(v2.text));
       if (checked.ok) return { state: checked.state, source: 'saved', canSave: true };
-      // Damaged version 1.2 data: keep a copy before doing anything else.
-      try {
-        storage.setItem(KEY_V2 + '.damaged', v2.text);
-        damagedCopy = true;
-      } catch (err) {
-        return { state: createState(today, null), source: 'new', canSave: false };
-      }
+      // Damaged version 1.2 data: protect a copy before doing anything else.
+      if (!keepDamagedCopy(storage, v2.text, today)) return unreadable(false);
+      damagedCopy = true;
     }
 
     var v1 = read(storage, KEY_V1);
+    if (v1.error) return unreadable(damagedCopy);
+
     if (v1.text === null) {
-      return { state: createState(today, null), source: 'new', canSave: true, damagedCopy: damagedCopy };
+      if (!damagedCopy) return { state: createState(today, null), source: 'new', canSave: true };
+      return { state: createState(today, null), source: 'damaged', canSave: false, needsDecision: true, damagedCopy: true };
     }
+
     var migration = migrateFromV1(parseJSON(v1.text), today);
-    return {
-      state: migration.state,
-      source: 'migrated',
-      canSave: true,
-      problem: migration.problem,
-      damagedCopy: damagedCopy
-    };
+    if (migration.problem || damagedCopy) {
+      return {
+        state: migration.state,
+        source: 'damaged',
+        canSave: false,
+        needsDecision: true,
+        problem: migration.problem, // true when the version 1.1 data is the damaged part
+        damagedCopy: damagedCopy
+      };
+    }
+    return { state: migration.state, source: 'migrated', canSave: true };
+  }
+
+  // The raw saved text, exactly as stored, for the "download old data" option.
+  function rawSavedData(storage) {
+    var out = {};
+    [KEY_V1, KEY_V2, KEY_V2 + '.damaged'].forEach(function (key) {
+      var r = read(storage, key);
+      if (!r.error && r.text !== null) out[key] = r.text;
+    });
+    return out;
   }
 
   // Saves version 1.2 data in one step. Never touches version 1.1 data.
@@ -329,27 +370,54 @@
   //    is added twice, so restoring the same file again changes nothing.
   //  - Room chores, schedules, completion history, and laundry are kept.
   // `current` must already be checked; it is copied, never changed.
+  // A text version of a value that ignores the order of keys, for comparing.
+  function sameValue(a, b) {
+    function canon(v) {
+      if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+      if (v && typeof v === 'object') {
+        return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}';
+      }
+      return JSON.stringify(v);
+    }
+    return canon(a) === canon(b);
+  }
+
   function mergeV1Backup(current, v1Data, today) {
     var merged = JSON.parse(JSON.stringify(current));
     var legacy = merged.legacy || { archivedOn: today, chores: [], history: {} };
-    var added = { weeks: 0, keptWeeks: 0, chores: 0 };
+    // weeks/chores: added. identical*: already archived, exactly the same.
+    // conflict*: already archived but different in the backup. The archived
+    // version is always kept; the backup's version is not imported.
+    var added = { weeks: 0, identicalWeeks: 0, conflictWeeks: [], chores: 0, identicalChores: 0, conflictChores: [] };
 
-    Object.keys(v1Data.history).forEach(function (week) {
-      if (legacy.history[week]) {
-        added.keptWeeks++;
-      } else {
+    Object.keys(v1Data.history).sort().forEach(function (week) {
+      var existing = legacy.history[week];
+      if (!existing) {
         legacy.history[week] = v1Data.history[week];
         added.weeks++;
+      } else if (sameValue(existing, v1Data.history[week])) {
+        added.identicalWeeks++;
+      } else {
+        added.conflictWeeks.push({ week: week, weekStart: existing.weekStart });
       }
     });
 
-    var ids = {};
+    var byId = {};
     var names = {};
-    legacy.chores.forEach(function (c) { ids[c.id] = true; names[choreKey(c)] = true; });
+    legacy.chores.forEach(function (c) { byId[c.id] = c; names[choreKey(c)] = true; });
     v1Data.chores.forEach(function (c) {
-      if (ids[c.id] || names[choreKey(c)]) return;
+      var sameId = byId[c.id];
+      if (sameId) {
+        if (sameValue(sameId, c)) added.identicalChores++;
+        else added.conflictChores.push({ id: c.id, archivedName: sameId.name, backupName: c.name });
+        return;
+      }
+      if (names[choreKey(c)]) {
+        added.identicalChores++; // the same chore saved on another device
+        return;
+      }
       legacy.chores.push(c);
-      ids[c.id] = true;
+      byId[c.id] = c;
       names[choreKey(c)] = true;
       added.chores++;
     });
@@ -415,6 +483,7 @@
     migrateFromV1: migrateFromV1,
     mergeV1Backup: mergeV1Backup,
     loadState: loadState,
+    rawSavedData: rawSavedData,
     saveState: saveState,
     validateState: validateState,
     createBackup: createBackup,
