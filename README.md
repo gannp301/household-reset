@@ -131,10 +131,23 @@ Tip: make a backup every week or two, and always before clearing Safari's websit
 2. Tap **Restore from backup…**, then tap **Browse** (or **Choose File**) and pick your backup file in Files.
 3. The app checks the file first:
    - If it isn't a Household Reset backup, or it's damaged, you'll see a red message and **nothing is changed**.
-   - If it's valid, you'll see what the backup contains and a warning that restoring will **replace everything currently saved**.
-4. Tap **Replace my data** to restore, or **Cancel** to keep your current data.
+   - If it's valid, you'll see what the backup contains and exactly what restoring will change.
+4. Tap the red button (**Replace my data**, or **Restore older backup** for a version 1.1 file) to restore, or **Cancel** to keep your current data.
 
-**Version 1.1 backup files still work.** They're upgraded the same way as saved version 1.1 data: supplies, cat care, and old history are restored, and room chores start fresh.
+### Restoring an older (version 1.1) backup
+
+Version 1.1 backup files still work. A 1.1 backup only contains supplies, cat care, and the old chore list and history, so restoring one **only changes those parts**:
+
+| Part of your data | What a version 1.1 backup does |
+|-------------------|--------------------------------|
+| Supplies and Cats | **Replaced** by the backup's lists. |
+| Old chores and weekly scores | **Added** to History → Version 1.1 archive. Weeks and chores already there are kept as they are, and nothing is added twice. |
+| Room chores, schedules, completion history | **Kept** exactly as they are. |
+| Laundry loads | **Kept** exactly as they are. |
+
+The confirmation box lists exactly what will be replaced, added, and kept before anything changes. Restoring the same 1.1 backup twice changes nothing the second time.
+
+A **version 1.2** backup is different: it contains everything, so restoring it replaces everything, including laundry loads. Its confirmation box says so.
 
 To move your lists to your phone, make a backup on the iPad, open the file on the phone (for example via iCloud Drive or AirDrop), and restore it in Household Reset there. The two devices still won't sync automatically after that.
 
@@ -162,7 +175,8 @@ To move your lists to your phone, make a backup on the iPad, open the file on th
 ## New programming ideas in version 1.2
 
 - **Data migration:** changing saved data from an old format to a new one. The safe recipe is to read the old data, build the new data in memory, save it under a new name, and leave the old data alone.
-- **Idempotent:** an action that gives the same result however many times it runs. The upgrade checks for new data first, so running it again does nothing.
+- **Idempotent:** an action that gives the same result however many times it runs. The upgrade checks for new data first, so running it again does nothing. Restoring the same older backup twice is idempotent too.
+- **Merge vs. replace:** restoring a version 1.1 backup *merges* (it changes only the parts the file knows about). Restoring a version 1.2 backup *replaces*, because the file contains everything.
 - **Calculated, not stored:** the app doesn't store "Clean toilet, week of Nov 7: not done". It *calculates* what's due from the frequency rule and only stores what you actually did. That's why viewing other weeks can't change anything.
 - **Day numbers:** dates are turned into "days since 1970" for maths, which avoids clock problems like daylight-saving time.
 - **Validation:** checking every part of data (like a backup file) before trusting it, so a damaged file is refused instead of breaking the app.
