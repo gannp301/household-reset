@@ -397,14 +397,12 @@
     return selectedWeek > cw ? selectedWeek : cw;
   }
 
-  function laundrySummary() {
-    var c = W.counts(state.laundry);
-    var parts = [];
-    if (c.waiting) parts.push(c.waiting + ' waiting');
-    if (c.inWasher) parts.push('washing');
-    if (c.inDryer) parts.push('drying');
-    if (c.needPutAway) parts.push(c.needPutAway + ' to put away');
-    return parts.length ? parts.join(' · ') : 'No loads in progress';
+  // Laundry's status line, plus any chores you added to the Laundry room
+  // yourself (as text only: laundry has no percentage bar).
+  function laundrySummary(progress) {
+    var text = W.statusLine(state.laundry) +
+      (progress.total ? ' · ' + progress.done + ' of ' + progress.total + ' chores done' : '');
+    return text.replace(/(\d) /g, '$1\u00a0'); // keep "1 waiting" together when it wraps
   }
 
   function renderRoomGrid() {
@@ -428,14 +426,14 @@
 
       var meta;
       if (room.id === 'laundry') {
-        meta = laundrySummary() + (progress.total ? ' · ' + progress.done + ' of ' + progress.total + ' chores' : '');
+        meta = laundrySummary(progress);
       } else if (before) {
         meta = 'Not tracked this week';
       } else {
         meta = progress.total ? progress.done + ' of ' + progress.total + ' done' : 'Nothing due this week';
       }
       card.appendChild(el('span', 'room-meta', meta));
-      card.appendChild(miniProgress(progress.percent));
+      if (room.id !== 'laundry') card.appendChild(miniProgress(progress.percent));
       if (overdue) card.appendChild(el('span', 'chip chip-overdue', '⚠ ' + overdue + ' overdue'));
       if (room.id === 'laundry') {
         var lateLoads = W.overduePutAway(state.laundry, laundryWeek()).length;
@@ -886,9 +884,17 @@
     var before = selectedWeek < state.activatedWeek;
 
     document.getElementById('room-title').textContent = room.icon + ' ' + room.name;
-    document.getElementById('room-progress-text').textContent = before ? 'Not tracked'
+    var isLaundry = room.id === 'laundry';
+    // Laundry loads aren't saved per week, so its status is always today's.
+    document.getElementById('room-progress-text').textContent = isLaundry ? laundrySummary(progress)
+      : before ? 'Not tracked'
       : progress.total ? progress.done + ' of ' + progress.total + ' done (' + progress.percent + '%)' : 'Nothing due';
+    document.getElementById('room-progress-bar').hidden = isLaundry;
     setProgress('room-progress-bar', 'room-progress-fill', progress.percent);
+    var lateNote = document.getElementById('laundry-late-note');
+    var late = isLaundry ? W.overduePutAway(state.laundry, cw).length : 0;
+    lateNote.hidden = !late;
+    lateNote.textContent = late ? '⚠ ' + count(late, 'load', 'loads') + ' from an earlier week still to put away' : '';
 
     var content = document.getElementById('room-content');
     content.textContent = '';
