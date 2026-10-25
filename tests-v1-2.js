@@ -1216,4 +1216,299 @@
     H.saveState(storage, result.state);
     expectSame(H.loadState(storage, '2026-10-29').state.laundry.archive, state.laundry.archive);
   });
+
+  // ======================================================================
+  section('Heads up panel');
+
+  var P = window.HouseholdPrep;
+
+  function kinds(hu) {
+    return hu.groups.map(function (g) { return g.kind; });
+  }
+
+  test('current week: overdue first, then next week\'s monthly chores', function () {
+    var hu = S.headsUp(freshState(), '2026-10-31', '2026-11-02');
+    expectEqual(hu.relation, 'current');
+    expectEqual(kinds(hu), ['overdue', 'soon']);
+    expectEqual(hu.groups[0].items.length, 25); // 16 weekly + 9 every-2-weeks chores missed in the week of Oct 24
+    expectEqual(hu.groups[1].week, '2026-11-07');
+    expectEqual(hu.groups[1].items.length, 8); // the monthly chores
+  });
+
+  test('due group lists only less-frequent chores, never ordinary weekly ones', function () {
+    var hu = S.headsUp(freshState(), '2026-10-24', ACTIVATED);
+    expectEqual(kinds(hu), ['due']);
+    expectTrue(hu.groups[0].items.every(function (i) { return i.task.frequency === 'biweekly'; }), 'only every-2-weeks chores due');
+    expectEqual(hu.groups[0].items.length, 9);
+  });
+
+  test('a future week shows chores due in THAT week, and no overdue group', function () {
+    var hu = S.headsUp(freshState(), '2026-11-07', '2026-11-02');
+    expectEqual(hu.relation, 'future');
+    expectEqual(kinds(hu), ['due']);
+    expectEqual(hu.groups[0].items.length, 17); // 9 every-2-weeks + 8 monthly
+  });
+
+  test('a past week shows only that week\'s chores that are still overdue', function () {
+    var state = freshState();
+    S.toggleDone(state, 'bathroom-clean-toilet', '2026-10-24', '2026-10-26');
+    var hu = S.headsUp(state, '2026-10-24', '2026-11-02');
+    expectEqual(hu.relation, 'past');
+    expectEqual(kinds(hu), ['overdue']);
+    expectEqual(hu.groups[0].items.length, 24); // 25 due, 1 done
+    expectTrue(hu.groups[0].items.every(function (i) { return i.effectiveWeek === '2026-10-24'; }), 'all from that week');
+  });
+
+  test('never more than three groups, always in priority order', function () {
+    var state = freshState();
+    var order = { overdue: 0, due: 1, soon: 2 };
+    for (var w = '2026-10-24'; w <= '2027-02-27'; w = S.addWeeks(w, 1)) {
+      var hu = S.headsUp(state, w, '2026-11-30');
+      expectTrue(hu.groups.length <= 3, w);
+      for (var i = 1; i < hu.groups.length; i++) expectTrue(order[hu.groups[i - 1].kind] < order[hu.groups[i].kind], w + ' order');
+    }
+  });
+
+  test('every chore listed belongs to the week its group names', function () {
+    var state = freshState();
+    S.moveOccurrence(state, 'bathroom-clean-mirror', '2026-10-24', '2026-11-14', '2026-10-26');
+    S.toggleDone(state, 'kitchen-clean-oven', '2027-01-02', '2026-10-26'); // done early
+    for (var w = '2026-10-24'; w <= '2027-03-27'; w = S.addWeeks(w, 1)) {
+      var hu = S.headsUp(state, w, '2026-10-26');
+      hu.groups.forEach(function (g) {
+        g.items.forEach(function (item) {
+          if (g.kind === 'due') expectEqual(item.effectiveWeek, w);
+          if (g.kind === 'soon') expectEqual(item.effectiveWeek, S.addWeeks(w, 1));
+          if (g.kind !== 'overdue') expectTrue(item.task.frequency !== 'weekly', 'weekly listed in ' + g.kind);
+          expectTrue(!(item.task.id === 'kitchen-clean-oven' && item.week === '2027-01-02'), 'done chore listed');
+        });
+      });
+    }
+    var nov14 = S.headsUp(state, '2026-11-14', '2026-10-26').groups[0].items;
+    expectTrue(nov14.some(function (i) { return i.task.id === 'bathroom-clean-mirror' && i.week === '2026-10-24'; }), 'moved chore in its new week');
+  });
+
+  test('all clear when nothing needs attention', function () {
+    var state = freshState();
+    state.tasks = state.tasks.filter(function (t) { return t.frequency === 'weekly'; });
+    expectEqual(S.headsUp(state, '2026-10-24', ACTIVATED).groups.length, 0);
+    expectEqual(S.headsUp(state, '2026-10-17', ACTIVATED).beforeActivation, true);
+  });
+
+  test('heads up and the overview never change saved data', function () {
+    var state = usedState();
+    var before = canon(state);
+    for (var w = '2026-10-17'; w <= '2027-01-30'; w = S.addWeeks(w, 1)) {
+      S.headsUp(state, w, '2026-11-16');
+      S.overview(state, w, '2026-11-16');
+    }
+    expectEqual(canon(state), before);
+  });
+
+  test('overview "Next week" counts less-frequent chores due the week after', function () {
+    expectEqual(S.overview(freshState(), '2026-10-31', '2026-11-02').nextWeek, 17);
+    expectEqual(S.overview(freshState(), '2026-10-24', ACTIVATED).nextWeek, 0);
+  });
+
+  // ======================================================================
+  section('Get ready for next week');
+
+  function promptFor(state, today, taskId) {
+    return P.prompts(state, today).filter(function (p) { return p.task.id === taskId; })[0];
+  }
+
+  test('next week is the following Saturday–Friday, including across New Year', function () {
+    expectEqual(P.nextWeek('2026-10-30'), '2026-10-31'); // Friday
+    expectEqual(P.nextWeek('2026-10-31'), '2026-11-07'); // Saturday starts a new week
+    expectEqual(P.nextWeek('2026-11-01'), '2026-11-07'); // Sunday
+    expectEqual(P.nextWeek('2026-12-31'), '2027-01-02');
+    expectEqual(P.nextWeek('2027-01-01'), '2027-01-02');
+  });
+
+  test('only next week\'s chores that need supplies get a prompt', function () {
+    var ids = P.prompts(freshState(), '2026-11-02').map(function (p) { return p.task.id; }).sort();
+    expectEqual(ids, ['bathroom-change-bathroom-trash', 'bathroom-clean-mirror', 'bathroom-deep-clean-shower-tub',
+      'bedroom-change-bedroom-trash', 'bedroom-clean-bedroom-mirror', 'whole-house-change-scent-booster-plugins']);
+    expectEqual(P.prompts(freshState(), '2026-10-28').length, 0); // next week (Oct 31) has no such chores
+  });
+
+  test('scent plugins due next week asks about scent plugin refills', function () {
+    var prompt = promptFor(freshState(), '2026-11-02', 'whole-house-change-scent-booster-plugins');
+    expectEqual(prompt.week, '2026-11-07');
+    expectSame(prompt.supplies.map(function (s) { return [s.name, s.status]; }), [['Scent plugin refills', 'missing']]);
+    expectEqual(P.addAction(prompt), 'add');
+  });
+
+  test('no generic prompts: weekly chores and chores without supplies never ask', function () {
+    var state = freshState();
+    Object.keys(S.DEFAULT_TASK_SUPPLIES).forEach(function (id) {
+      var task = S.findTask(state, id);
+      expectTrue(task && task.frequency !== 'weekly', id);
+    });
+    expectEqual(S.findTask(state, 'bathroom-wash-shower-curtains').supplies, undefined);
+    for (var day = '2026-10-25'; day < '2027-03-01'; day = S.addDays(day, 7)) {
+      P.prompts(state, day).forEach(function (p) {
+        expectTrue(p.task.supplies.length > 0 && p.task.frequency !== 'weekly', p.task.name);
+      });
+    }
+  });
+
+  test('a ticked item on the Supplies list still asks (never assumed in stock)', function () {
+    var state = freshState();
+    state.supplies.push({ id: 'g1', name: 'Glass cleaner', done: true });
+    var prompt = promptFor(state, '2026-11-02', 'bathroom-clean-mirror');
+    expectEqual(prompt.answer, null);
+    expectEqual(prompt.supplies[0].status, 'ticked');
+    expectEqual(P.addAction(prompt), 'mark');
+  });
+
+  test('"Add to supplies" adds a missing item once, as needed (unticked)', function () {
+    var state = freshState();
+    var before = state.supplies.length;
+    P.addToSupplies(state, promptFor(state, '2026-11-02', 'whole-house-change-scent-booster-plugins'), '2026-11-02');
+    expectEqual(state.supplies.length, before + 1);
+    var item = P.findSupply(state, 'scent plugin refills');
+    expectEqual(item.done, false);
+    expectEqual(state.prep['whole-house-change-scent-booster-plugins|2026-11-07'].answer, 'added');
+  });
+
+  test('no duplicates: an existing item is marked as needed instead (ignoring capitals)', function () {
+    var state = freshState();
+    state.supplies.push({ id: 'g1', name: 'glass  CLEANER', done: true });
+    var count = state.supplies.length;
+    P.addToSupplies(state, promptFor(state, '2026-11-02', 'bathroom-clean-mirror'), '2026-11-02');
+    P.addToSupplies(state, promptFor(state, '2026-11-02', 'bedroom-clean-bedroom-mirror'), '2026-11-02');
+    expectEqual(state.supplies.length, count);
+    expectEqual(state.supplies.filter(function (s) { return /glass/i.test(s.name); }).length, 1);
+    expectEqual(P.findSupply(state, 'Glass cleaner').done, false);
+  });
+
+  test('two chores needing the same new item add it only once', function () {
+    var state = freshState();
+    P.addToSupplies(state, promptFor(state, '2026-11-02', 'bathroom-change-bathroom-trash'), '2026-11-02');
+    var second = promptFor(state, '2026-11-02', 'bedroom-change-bedroom-trash');
+    expectEqual(P.addAction(second), 'mark');
+    P.addToSupplies(state, second, '2026-11-02');
+    expectEqual(state.supplies.filter(function (s) { return s.name === 'Small trash bags'; }).length, 1);
+  });
+
+  test('"I\'m stocked" is saved for that occurrence and survives a reload', function () {
+    var state = freshState();
+    P.answerStocked(state, promptFor(state, '2026-11-02', 'whole-house-change-scent-booster-plugins'), '2026-11-02');
+    var storage = fakeStorage({});
+    H.saveState(storage, state);
+    var loaded = H.loadState(storage, '2026-11-03').state;
+    expectEqual(promptFor(loaded, '2026-11-03', 'whole-house-change-scent-booster-plugins').answer.answer, 'stocked');
+    expectEqual(P.answerStocked(loaded, promptFor(loaded, '2026-11-03', 'whole-house-change-scent-booster-plugins'), '2026-11-03'), false);
+  });
+
+  test('the next occurrence of the same chore asks again', function () {
+    var state = freshState();
+    P.answerStocked(state, promptFor(state, '2026-11-02', 'whole-house-change-scent-booster-plugins'), '2026-11-02');
+    var december = promptFor(state, '2026-11-30', 'whole-house-change-scent-booster-plugins');
+    expectEqual(december.week, '2026-12-05');
+    expectEqual(december.answer, null);
+  });
+
+  test('undo removes an added item, or restores an item\'s old tick', function () {
+    var state = freshState();
+    var supplyCount = state.supplies.length;
+    P.addToSupplies(state, promptFor(state, '2026-11-02', 'whole-house-change-scent-booster-plugins'), '2026-11-02');
+    P.undoAnswer(state, 'whole-house-change-scent-booster-plugins|2026-11-07');
+    expectEqual(state.supplies.length, supplyCount);
+    expectEqual(promptFor(state, '2026-11-02', 'whole-house-change-scent-booster-plugins').answer, null);
+
+    state.supplies.push({ id: 'g1', name: 'Glass cleaner', done: true });
+    P.addToSupplies(state, promptFor(state, '2026-11-02', 'bathroom-clean-mirror'), '2026-11-02');
+    expectEqual(P.findSupply(state, 'Glass cleaner').done, false);
+    P.undoAnswer(state, 'bathroom-clean-mirror|2026-11-07');
+    expectEqual(P.findSupply(state, 'Glass cleaner').done, true);
+  });
+
+  test('undo keeps an added item that another answer still relies on', function () {
+    var state = freshState();
+    P.addToSupplies(state, promptFor(state, '2026-11-02', 'bathroom-clean-mirror'), '2026-11-02'); // adds it
+    P.addToSupplies(state, promptFor(state, '2026-11-02', 'bedroom-clean-bedroom-mirror'), '2026-11-02'); // marks it
+    P.undoAnswer(state, 'bathroom-clean-mirror|2026-11-07');
+    expectTrue(P.findSupply(state, 'Glass cleaner') !== null, 'still on the Supplies list');
+    expectEqual(P.findSupply(state, 'Glass cleaner').done, false);
+    P.undoAnswer(state, 'bedroom-clean-bedroom-mirror|2026-11-07');
+    expectEqual(P.findSupply(state, 'Glass cleaner').done, false); // its old state when the bedroom answer was given
+  });
+
+  test('chores needing the same supplies share one question; answers stay per occurrence', function () {
+    var state = freshState();
+    var groups = P.groupPrompts(P.prompts(state, '2026-11-02'));
+    expectEqual(groups.length, 4); // glass cleaner, small trash bags, tub & tile cleaner, scent refills
+    var glass = groups.filter(function (g) { return g.supplies[0].name === 'Glass cleaner'; })[0];
+    expectEqual(glass.prompts.map(function (p) { return p.task.id; }).sort(), ['bathroom-clean-mirror', 'bedroom-clean-bedroom-mirror']);
+    glass.pending.forEach(function (p) { P.addToSupplies(state, p, '2026-11-02'); });
+    expectEqual(state.supplies.filter(function (s) { return s.name === 'Glass cleaner'; }).length, 1);
+    expectEqual(Object.keys(state.prep).sort(), ['bathroom-clean-mirror|2026-11-07', 'bedroom-clean-bedroom-mirror|2026-11-07']);
+    var after = P.groupPrompts(P.prompts(state, '2026-11-02')).filter(function (g) { return g.key === glass.key; })[0];
+    expectEqual(after.pending.length, 0);
+    after.prompts.slice().reverse().forEach(function (p) { P.undoAnswer(state, p.key); });
+    expectEqual(P.findSupply(state, 'Glass cleaner'), null); // undoing the whole question removes what it added
+    expectSame(state.prep, {});
+  });
+
+  test('answering prep questions never ticks off chores', function () {
+    var state = freshState();
+    P.prompts(state, '2026-11-02').forEach(function (p) { P.answerStocked(state, p, '2026-11-02'); });
+    expectSame(state.records, {});
+  });
+
+  test('chores can list supplies when added or edited', function () {
+    var state = freshState();
+    var task = S.addTask(state, 'kitchen', 'Descale kettle', 'monthly', null, ACTIVATED, 'Descaler,  descaler , ');
+    expectEqual(task.supplies, ['Descaler']);
+    S.editTask(state, task.id, 'Descale kettle', 'monthly', null, ACTIVATED); // supplies not given: kept
+    expectEqual(S.findTask(state, task.id).supplies, ['Descaler']);
+    S.editTask(state, task.id, 'Descale kettle', 'monthly', null, ACTIVATED, '');
+    expectEqual(S.findTask(state, task.id).supplies, undefined);
+  });
+
+  test('prep answers and chore supplies are included in a 1.2 backup', function () {
+    var state = usedState();
+    P.addToSupplies(state, promptFor(state, '2026-11-02', 'whole-house-change-scent-booster-plugins'), '2026-11-02');
+    P.answerStocked(state, promptFor(state, '2026-11-02', 'bathroom-clean-mirror'), '2026-11-02');
+    var result = H.validateBackup(JSON.stringify(H.createBackup(state, new Date())), '2026-11-03');
+    expectEqual(result.ok, true);
+    expectSame(result.state, state);
+    expectEqual(Object.keys(result.state.prep).length, 2);
+  });
+
+  test('older 1.2 data without prep answers or chore supplies still loads', function () {
+    var old = freshState();
+    delete old.prep;
+    old.tasks.forEach(function (t) { delete t.supplies; });
+    var checked = H.validateState(copy(old));
+    expectEqual(checked.ok, true);
+    expectSame(checked.state.prep, {});
+    var restored = H.validateBackup(JSON.stringify({ app: 'household-reset', backupVersion: 2, exportedAt: 'x', data: old }), ACTIVATED);
+    expectEqual(restored.ok, true);
+  });
+
+  test('damaged prep answers or supplies are rejected', function () {
+    var a = freshState();
+    a.prep = { 'x|2026-11-07': { answer: 'maybe', answeredOn: '2026-11-02', added: [], marked: [] } };
+    expectTrue(H.validateState(copy(a)).error.indexOf('prep') > -1, 'bad answer');
+    var b = freshState();
+    b.tasks[0].supplies = 'Glass cleaner';
+    expectTrue(H.validateState(copy(b)).error.indexOf('room chores') > -1, 'bad supplies');
+  });
+
+  test('upgrading from 1.1 adds chore supplies but changes nothing on the Supplies list', function () {
+    var state = H.migrateFromV1(copy(V1_FIXTURE), ACTIVATED).state;
+    expectEqual(S.findTask(state, 'whole-house-change-scent-booster-plugins').supplies, ['Scent plugin refills']);
+    expectSame(state.supplies, V1_FIXTURE.supplies);
+    expectSame(state.prep, {});
+  });
+
+  test('restoring a 1.1 backup keeps existing prep answers', function () {
+    var preview = initializedPreview();
+    P.answerStocked(preview, promptFor(preview, '2026-11-02', 'bathroom-clean-mirror'), '2026-11-02');
+    var result = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-11-03', preview);
+    expectSame(result.state.prep, preview.prep);
+  });
 })();
