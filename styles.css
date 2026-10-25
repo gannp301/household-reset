@@ -16,10 +16,24 @@
   --radius: 18px;
   --tap: 52px; /* minimum size of anything you tap */
   --shadow: 0 2px 10px rgba(47, 47, 51, 0.06);
+
+  /* Frequency colours (version 1.2): a soft background plus a darker,
+     readable text colour. Icons and labels are always shown too. */
+  --weekly-bg: #e1eadb;     --weekly-ink: #3d5a37;     --weekly-line: #8fae86;    /* sage green */
+  --biweekly-bg: #e8e1f1;   --biweekly-ink: #54457a;   --biweekly-line: #a796c8;  /* lavender */
+  --monthly-bg: #dde7f0;    --monthly-ink: #34516b;    --monthly-line: #87a5c0;   /* muted blue */
+  --quarterly-bg: #ece3d8;  --quarterly-ink: #5c4a39;  --quarterly-line: #b39d84; /* warm taupe */
+  --overdue-bg: #fbe8c4;    --overdue-ink: #774700;    --overdue-line: #e0a63b;   /* amber */
+  --asneeded-bg: #ececea;   --asneeded-ink: #4d4d50;   --asneeded-line: #a9a9a6;  /* neutral grey */
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Anything marked "hidden" stays hidden, even if another rule sets display */
+[hidden] {
+  display: none !important;
 }
 
 html {
@@ -421,6 +435,537 @@ input:focus-visible {
 
 .backup-status.error {
   color: var(--danger);
+}
+
+/* ---------- Version 1.2: notices and form controls ---------- */
+.notice {
+  background: var(--blush);
+  border: 1px solid var(--blush-strong);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.notice p {
+  margin: 0 0 10px;
+}
+
+select {
+  min-height: var(--tap);
+  max-width: 100%;
+  padding: 0 12px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--charcoal);
+  font: inherit;
+  font-size: 1rem;
+}
+
+select:focus-visible,
+.room-card:focus-visible {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.section-title {
+  margin: 20px 0 10px;
+}
+
+/* ---------- Week navigator and overview ---------- */
+.week-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-btn {
+  flex: none;
+  padding: 0;
+  width: var(--tap);
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.week-title {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.week-title strong {
+  display: block;
+  font-size: 1.05rem;
+}
+
+.eyebrow {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--blush-deep);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.this-week-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 14px 0 12px;
+}
+
+.stat {
+  background: var(--cream);
+  border-radius: 14px;
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.stat-num {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.stat-label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--charcoal-soft);
+}
+
+.stat-overdue {
+  background: var(--overdue-bg);
+  color: var(--overdue-ink);
+}
+
+.stat-overdue .stat-label {
+  color: var(--overdue-ink);
+}
+
+/* ---------- Reminders and upcoming ---------- */
+.reminder-list,
+.upcoming-list,
+.legend-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.reminder-list li {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--cream);
+}
+
+.reminder-list .reminder-overdue {
+  background: var(--overdue-bg);
+  color: var(--overdue-ink);
+  font-weight: 600;
+}
+
+.upcoming-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 0 10px 12px;
+  border-left: 5px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.upcoming-when {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--charcoal-soft);
+}
+
+.legend-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------- Room cards ---------- */
+.room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.room-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-height: 120px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  color: var(--charcoal);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.room-card:active {
+  transform: scale(0.98);
+}
+
+.room-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.room-icon {
+  font-size: 1.6rem;
+}
+
+.room-name {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.room-meta {
+  font-size: 0.95rem;
+  color: var(--charcoal-soft);
+}
+
+.progress-track.mini {
+  height: 8px;
+}
+
+.chip {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.chip-overdue {
+  background: var(--overdue-bg);
+  color: var(--overdue-ink);
+}
+
+/* ---------- Inside a room ---------- */
+.back-btn {
+  margin-bottom: 12px;
+}
+
+.room-section h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.room-section .item-list {
+  margin: 12px 0 0;
+}
+
+.room-section .item {
+  box-shadow: none;
+}
+
+.overdue-section {
+  border-color: var(--overdue-line);
+}
+
+.task-row {
+  flex-direction: column;
+  align-items: stretch;
+  border-left-width: 6px;
+}
+
+.row-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+
+.move-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.badges .badge {
+  margin-top: 0;
+}
+
+/* Frequency colours: badge, left edge of each row, and upcoming list */
+.freq-weekly { --f-bg: var(--weekly-bg); --f-ink: var(--weekly-ink); --f-line: var(--weekly-line); }
+.freq-biweekly { --f-bg: var(--biweekly-bg); --f-ink: var(--biweekly-ink); --f-line: var(--biweekly-line); }
+.freq-monthly { --f-bg: var(--monthly-bg); --f-ink: var(--monthly-ink); --f-line: var(--monthly-line); }
+.freq-quarterly { --f-bg: var(--quarterly-bg); --f-ink: var(--quarterly-ink); --f-line: var(--quarterly-line); }
+.freq-asneeded { --f-bg: var(--asneeded-bg); --f-ink: var(--asneeded-ink); --f-line: var(--asneeded-line); }
+
+.badge.freq {
+  background: var(--f-bg);
+  color: var(--f-ink);
+  font-weight: 600;
+}
+
+.task-row,
+.manage-row,
+.upcoming-item {
+  border-left-color: var(--f-line);
+}
+
+.manage-row {
+  border-left-width: 6px;
+  flex-wrap: wrap;
+}
+
+.badge.status-overdue {
+  background: var(--overdue-bg);
+  color: var(--overdue-ink);
+  font-weight: 600;
+}
+
+.task-row.status-overdue {
+  background: #fff7e8;
+}
+
+.badge.status-done {
+  background: var(--card);
+  color: var(--charcoal);
+}
+
+.badge.status-moved,
+.badge.status-upcoming,
+.badge.status-skipped {
+  background: var(--cream-deep);
+  color: var(--charcoal-soft);
+}
+
+.task-row.status-skipped .item-name {
+  color: var(--charcoal-soft);
+  font-style: italic;
+}
+
+.task-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.task-form input[type="text"] {
+  flex: 1 1 220px;
+}
+
+.form-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* ---------- Laundry ---------- */
+.laundry-stats {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.machines {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.machine {
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--weekly-bg);
+  color: var(--weekly-ink);
+}
+
+.machine.busy {
+  background: var(--blush);
+  color: var(--charcoal);
+}
+
+.machine-name {
+  display: block;
+  font-weight: 700;
+}
+
+.machine-state {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.laundry-message:empty {
+  display: none;
+}
+
+.laundry-message {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--overdue-bg);
+  color: var(--overdue-ink);
+  font-weight: 600;
+}
+
+.load-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.load-form input[type="text"] {
+  flex: 1 1 160px;
+}
+
+.category-title {
+  margin: 18px 0 8px;
+  font-size: 1rem;
+}
+
+.load-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.load {
+  padding: 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.load.stage-washer,
+.load.stage-dryer {
+  border-color: var(--blush-strong);
+}
+
+.load-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.load-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin: 10px 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  padding: 6px 4px;
+  border-radius: 10px;
+  background: var(--cream-deep);
+  font-size: 0.75rem;
+  text-align: center;
+  color: var(--charcoal-soft);
+}
+
+.step.past {
+  background: var(--blush);
+}
+
+.step.now {
+  background: var(--blush-deep);
+  color: #fff;
+  font-weight: 700;
+}
+
+.load-info {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  color: var(--charcoal-soft);
+}
+
+.load-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.load-blocked {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  color: var(--overdue-ink);
+}
+
+.rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rename-form input[type="text"] {
+  flex: 1 1 180px;
+}
+
+/* ---------- History (version 1.2) ---------- */
+.history-group-title {
+  margin: 10px 0 2px;
+  font-weight: 600;
+  color: var(--charcoal);
+}
+
+.history-lines {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.history-item.legacy {
+  background: var(--cream);
+}
+
+@media (max-width: 480px) {
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .laundry-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .step {
+    font-size: 0.7rem;
+  }
 }
 
 /* ---------- Footer ---------- */
