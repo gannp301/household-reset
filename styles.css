@@ -61,6 +61,7 @@ h2 {
 .app-header,
 .tabs,
 main,
+.backup-area,
 .app-footer {
   max-width: 720px;
   margin: 0 auto;
@@ -364,6 +365,62 @@ input:focus-visible {
   display: flex;
   align-items: center;
   cursor: pointer;
+}
+
+/* ---------- Backup & Restore ---------- */
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+/* The "Restore" label is styled to look like a button; it opens the file picker */
+.file-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#restore-file:focus-visible + .file-button {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+}
+
+.btn-warning {
+  background: var(--danger);
+  color: #fff;
+}
+
+.restore-confirm {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--blush);
+  border: 1px solid var(--blush-strong);
+}
+
+.restore-confirm p {
+  margin: 0 0 8px;
+}
+
+.restore-title {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.backup-status {
+  margin: 12px 0 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.backup-status:empty {
+  display: none;
+}
+
+.backup-status.error {
+  color: var(--danger);
 }
 
 /* ---------- Footer ---------- */
