@@ -188,6 +188,17 @@
     return moved;
   }
 
+  // Finished loads not put away whose finish date is BEFORE the current
+  // cleaning week (`weekStart` is that week's Saturday). Calculated each time
+  // from the loads themselves, so there are no extra records to go stale:
+  // marking the load put away clears it. Only loads still on the board count
+  // (cleared loads are always put away). Oldest first.
+  function overduePutAway(laundry, weekStart) {
+    return laundry.loads.filter(function (l) {
+      return l.stage === 'finished' && !l.putAway && l.finishedOn && l.finishedOn < weekStart;
+    }).sort(function (a, b) { return a.finishedOn < b.finishedOn ? -1 : a.finishedOn > b.finishedOn ? 1 : 0; });
+  }
+
   function loadsNeedingPutAway(laundry) {
     return laundry.loads.filter(function (l) { return l.stage === 'finished' && !l.putAway; });
   }
@@ -233,6 +244,7 @@
     deleteLoad: deleteLoad,
     clearPutAway: clearPutAway,
     loadsNeedingPutAway: loadsNeedingPutAway,
+    overduePutAway: overduePutAway,
     finishedBetween: finishedBetween,
     counts: counts
   };
