@@ -1429,6 +1429,82 @@ select:focus-visible,
   white-space: normal;
 }
 
+/* ---------- Skip for now panel and Heads up rooms (v1.3 QC) ---------- */
+.skip-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+
+.skip-panel .hint {
+  margin: 0;
+}
+
+.move-label {
+  flex-basis: 100%;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.hu-rooms {
+  padding: 0 10px 10px;
+}
+
+.hu-room {
+  margin-top: 6px;
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--charcoal);
+}
+
+.hu-room-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.hu-room-summary::-webkit-details-marker {
+  display: none;
+}
+
+.hu-room-summary::before {
+  content: "▸";
+  color: var(--blush-deep);
+}
+
+.hu-room[open] > .hu-room-summary::before {
+  content: "▾";
+}
+
+.hu-room-name {
+  flex: 1;
+}
+
+.hu-room-count {
+  min-width: 28px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--cream-deep);
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.hu-room-summary:focus-visible {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+}
+
+.hu-room .hu-items {
+  padding: 0 12px 8px;
+}
+
 /* ---------- Laundry ---------- */
 .laundry-stats {
   grid-template-columns: repeat(5, 1fr);
