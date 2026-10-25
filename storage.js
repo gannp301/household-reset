@@ -1,0 +1,617 @@
+/*
+ * storage.js — saving, loading, upgrading, and backing up (version 1.2).
+ *
+ * Safety rules this file follows:
+ *  - Version 1.2 saves under a NEW name, "householdReset.v2".
+ *  - It only ever READS the version 1.1 data ("householdReset.v1") and never
+ *    changes or deletes it. If anything goes wrong, the old data is still there.
+ *  - The upgrade ("migration") builds the whole new data object in memory
+ *    first and saves it in one step, so it can't half-finish.
+ *  - Once "householdReset.v2" exists, it's used as-is and the upgrade never
+ *    runs again, so refreshing can't duplicate anything.
+ */
+(function (global) {
+  'use strict';
+
+  var L = global.HouseholdLogic;
+  var S = global.HouseholdSchedule;
+  var W = global.HouseholdLaundry;
+
+  var KEY_V1 = 'householdReset.v1';
+  var KEY_V2 = 'householdReset.v2';
+  var DATA_VERSION = 2;
+  var BACKUP_VERSION = 2;
+  var MAX_BACKUP_CHARACTERS = 5000000; // about 5 MB
+
+  // ---------- Building version 2 data ----------
+
+  // A brand-new version 2 state. `v1Data` is checked version 1.1 data (or null).
+  function createState(today, v1Data) {
+    var week = S.weekStart(today);
+    var starter = v1Data || L.createDefaultState(); // gives default supplies and cat tasks
+    return {
+      version: DATA_VERSION,
+      activatedOn: today,
+      activatedWeek: week,
+      tasks: S.createDefaultTasks(week),
+      records: {},
+      asNeeded: [],
+      prep: {}, // "Get ready for next week" answers, one per chore occurrence
+      reviews: {}, // "Finish Cleaning Week" reviews, one per week
+      laundry: W.createLaundry(),
+      supplies: starter.supplies,
+      supplyCategories: global.HouseholdSupplies.defaultCategories(), // version 1.3
+      pets: starter.pets,
+      legacy: v1Data ? { archivedOn: today, chores: v1Data.chores, history: v1Data.history } : null
+    };
+  }
+
+  // Checks version 1.1 data with version 1.1's own backup checker.
+  // Returns a clean copy, or null if it's damaged.
+  function checkV1Data(data) {
+    var text = JSON.stringify({ app: 'household-reset', backupVersion: 1, data: data });
+    var result = L.validateBackup(text);
+    return result.ok ? result.state : null;
+  }
+
+  // Upgrades version 1.1 data to version 1.2:
+  //  - Supplies and Cats are kept exactly.
+  //  - The old chore list and weekly history move into a read-only archive.
+  //  - The new room schedule starts fresh, with no invented completions.
+  function migrateFromV1(v1Data, today) {
+    var clean = checkV1Data(v1Data);
+    if (!clean) {
+      var state = createState(today, null);
+      state.legacy = {
+        archivedOn: today,
+        chores: [],
+        history: {},
+        note: 'Your version 1.1 data could not be read, so it was not copied. It is still stored, untouched, in this browser.'
+      };
+      return { state: state, problem: true };
+    }
+    return { state: createState(today, clean), problem: false };
+  }
+
+  // ---------- Loading and saving ----------
+
+  function read(storage, key) {
+    try {
+      return { text: storage.getItem(key) };
+    } catch (err) {
+      return { text: null, error: true };
+    }
+  }
+
+  function parseJSON(text) {
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      return undefined;
+    }
+  }
+
+  // Keeps a copy of damaged version 1.2 data under a separate name, without
+  // overwriting an earlier, different safety copy. Returns true if it's safe.
+  function keepDamagedCopy(storage, text, today) {
+    var key = KEY_V2 + '.damaged';
+    var existing = read(storage, key);
+    if (existing.error) return false;
+    if (existing.text === text) return true;
+    if (existing.text !== null) key += '.' + today;
+    try {
+      storage.setItem(key, text);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // Works out which data to use when the app opens. Returns
+  // { state, source, canSave, needsDecision, problem, damagedCopy }.
+  //   source 'saved'      normal: version 1.2 data loaded
+  //          'migrated'   version 1.1 data upgraded (the app saves it)
+  //          'new'        first visit, nothing saved yet
+  //          'unreadable' storage couldn't be read (or protected): canSave is
+  //                       false, so nothing is written over data we couldn't see
+  //          'damaged'    saved data is damaged: canSave is false and
+  //                       needsDecision is true. `state` is only a stand-in
+  //                       until you restore a backup or choose to start over.
+  // The only thing it ever writes is a safety copy of damaged 1.2 data.
+  function loadState(storage, today) {
+    function unreadable(damagedCopy) {
+      return { state: createState(today, null), source: 'unreadable', canSave: false, damagedCopy: !!damagedCopy };
+    }
+
+    var v2 = read(storage, KEY_V2);
+    if (v2.error) return unreadable(false);
+
+    var damagedCopy = false;
+    if (v2.text !== null) {
+      var checked = validateState(parseJSON(v2.text));
+      if (checked.ok) {
+        // Older 1.2 data: add default supply links that didn't exist yet
+        // (never over a chore's own supplies). The app saves the result.
+        var linked = S.addMissingDefaultSupplies(checked.state);
+        return { state: checked.state, source: 'saved', canSave: true, addedSupplyLinks: linked };
+      }
+      // Damaged version 1.2 data: protect a copy before doing anything else.
+      if (!keepDamagedCopy(storage, v2.text, today)) return unreadable(false);
+      damagedCopy = true;
+    }
+
+    var v1 = read(storage, KEY_V1);
+    if (v1.error) return unreadable(damagedCopy);
+
+    if (v1.text === null) {
+      if (!damagedCopy) return { state: createState(today, null), source: 'new', canSave: true };
+      return { state: createState(today, null), source: 'damaged', canSave: false, needsDecision: true, damagedCopy: true };
+    }
+
+    var migration = migrateFromV1(parseJSON(v1.text), today);
+    if (migration.problem || damagedCopy) {
+      return {
+        state: migration.state,
+        source: 'damaged',
+        canSave: false,
+        needsDecision: true,
+        problem: migration.problem, // true when the version 1.1 data is the damaged part
+        damagedCopy: damagedCopy
+      };
+    }
+    return { state: migration.state, source: 'migrated', canSave: true };
+  }
+
+  // The raw saved text, exactly as stored, for the "download old data" option.
+  function rawSavedData(storage) {
+    var out = {};
+    [KEY_V1, KEY_V2, KEY_V2 + '.damaged'].forEach(function (key) {
+      var r = read(storage, key);
+      if (!r.error && r.text !== null) out[key] = r.text;
+    });
+    return out;
+  }
+
+  // Saves version 1.2 data in one step. Never touches version 1.1 data.
+  function saveState(storage, state) {
+    try {
+      storage.setItem(KEY_V2, JSON.stringify(state));
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // ---------- Checking version 2 data ----------
+
+  function isPlainObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function isCount(value) {
+    return typeof value === 'number' && value >= 0 && Math.floor(value) === value;
+  }
+
+  function isId(value) {
+    return typeof value === 'string' && value !== '' && value.length <= 120;
+  }
+
+  function isDateOrNull(value) {
+    return value === null || S.isDateText(value);
+  }
+
+  // Runs `check` on every item. Returns the list of copies, or null if any fail.
+  function checkList(list, check) {
+    if (!Array.isArray(list)) return null;
+    var copies = [];
+    for (var i = 0; i < list.length; i++) {
+      var copy = isPlainObject(list[i]) ? check(list[i]) : null;
+      if (!copy) return null;
+      copies.push(copy);
+    }
+    return copies;
+  }
+
+  function allUnique(items) {
+    var seen = {};
+    return items.every(function (item) {
+      if (seen[item.id]) return false;
+      seen[item.id] = true;
+      return true;
+    });
+  }
+
+  function checkTask(t) {
+    var name = S.cleanName(t.name);
+    if (!isId(t.id) || !S.roomById(t.room) || !name || !S.FREQUENCIES[t.frequency] || !S.isSaturday(t.since)) return null;
+    var copy = { id: t.id, room: t.room, name: name, frequency: t.frequency, since: t.since };
+    if (t.frequency === 'biweekly') {
+      if (!S.isSaturday(t.anchor)) return null;
+      copy.anchor = t.anchor;
+    }
+    // Optional: supplies the chore needs (added in a later 1.2 update, so
+    // older data simply doesn't have it).
+    if (t.supplies !== undefined) {
+      var supplies = S.cleanSupplies(t.supplies);
+      if (!Array.isArray(t.supplies) || supplies.length !== t.supplies.length) return null;
+      copy.supplies = supplies; // [] means you chose 'no supplies'
+    }
+    return copy;
+  }
+
+  // Version 1.3 supply categories. Older data has none: it gets the default
+  // list. "Other" is always kept (and added back if missing).
+  function checkSupplyCategories(list) {
+    if (list === undefined) return global.HouseholdSupplies.defaultCategories();
+    var copies = checkList(list, function (c) {
+      var name = typeof c.name === 'string' ? c.name.replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+      return isId(c.id) && name ? { id: c.id, name: name } : null;
+    });
+    if (!copies || !allUnique(copies)) return null;
+    if (!copies.some(function (c) { return c.id === 'other'; })) copies.push({ id: 'other', name: 'Other' });
+    return copies;
+  }
+
+  // Keeps the version 1.3 extras on each supply (the version 1.1 checker
+  // removes fields it doesn't know). `checked` is the already-checked list.
+  //  - category: kept if it names an existing category ("other" = no field)
+  //  - note: optional short text
+  function checkSupplyExtras(original, checked, categories) {
+    var ids = categories.map(function (c) { return c.id; });
+    var out = [];
+    for (var i = 0; i < checked.length; i++) {
+      var item = original[i];
+      var copy = { id: checked[i].id, name: checked[i].name, done: checked[i].done };
+      if (item.category !== undefined) {
+        if (typeof item.category !== 'string') return null;
+        if (item.category !== 'other' && ids.indexOf(item.category) > -1) copy.category = item.category;
+      }
+      if (item.note !== undefined) {
+        if (typeof item.note !== 'string') return null;
+        var note = item.note.replace(/\s+/g, ' ').trim().slice(0, 300);
+        if (note) copy.note = note;
+      }
+      out.push(copy);
+    }
+    return out;
+  }
+
+  // Optional "Finish Cleaning Week" reviews. Missing in older data = {}.
+  function checkReviews(reviews) {
+    if (reviews === undefined) return {};
+    if (!isPlainObject(reviews)) return null;
+    var copy = {};
+    var weeks = Object.keys(reviews);
+    for (var i = 0; i < weeks.length; i++) {
+      var r = reviews[weeks[i]];
+      if (!S.isSaturday(weeks[i]) || !isPlainObject(r) || !S.isDateText(r.reviewedOn) || !S.isDateText(r.updatedOn)) return null;
+      if (!isPlainObject(r.decisions) || !isPlainObject(r.counts)) return null;
+      var decisions = {};
+      var keys = Object.keys(r.decisions);
+      for (var j = 0; j < keys.length; j++) {
+        var parts = keys[j].split('|');
+        var d = r.decisions[keys[j]];
+        if (parts.length !== 2 || !isId(parts[0]) || !S.isSaturday(parts[1]) || (d !== 'carry' && d !== 'done')) return null;
+        decisions[keys[j]] = d;
+      }
+      var counts = {};
+      var ok = ['done', 'carried', 'notes', 'supplies'].every(function (k) {
+        counts[k] = r.counts[k];
+        return isCount(r.counts[k]);
+      });
+      if (!ok) return null;
+      copy[weeks[i]] = { reviewedOn: r.reviewedOn, updatedOn: r.updatedOn, decisions: decisions, counts: counts };
+    }
+    return copy;
+  }
+
+  // Optional "Get ready for next week" answers. Missing in older data = {}.
+  function checkPrep(prep) {
+    if (prep === undefined) return {};
+    if (!isPlainObject(prep)) return null;
+    var copy = {};
+    var keys = Object.keys(prep);
+    for (var i = 0; i < keys.length; i++) {
+      var p = prep[keys[i]];
+      var parts = keys[i].split('|');
+      if (parts.length !== 2 || !isId(parts[0]) || !S.isSaturday(parts[1]) || !isPlainObject(p)) return null;
+      if ((p.answer !== 'stocked' && p.answer !== 'added') || !S.isDateText(p.answeredOn)) return null;
+      if (!Array.isArray(p.added) || !p.added.every(isId)) return null;
+      if (!Array.isArray(p.marked) || !p.marked.every(function (m) {
+        return isPlainObject(m) && isId(m.id) && typeof m.wasDone === 'boolean';
+      })) return null;
+      copy[keys[i]] = {
+        answer: p.answer,
+        answeredOn: p.answeredOn,
+        added: p.added.slice(),
+        marked: p.marked.map(function (m) { return { id: m.id, wasDone: m.wasDone }; })
+      };
+    }
+    return copy;
+  }
+
+  function checkRecords(records) {
+    if (!isPlainObject(records)) return null;
+    var copy = {};
+    var keys = Object.keys(records);
+    for (var i = 0; i < keys.length; i++) {
+      var r = records[keys[i]];
+      if (!isPlainObject(r) || !isId(r.taskId) || !S.isSaturday(r.week)) return null;
+      if (keys[i] !== S.recordKey(r.taskId, r.week) || !S.roomById(r.room) || !S.cleanName(r.name)) return null;
+      if (r.status !== undefined && r.status !== 'done' && r.status !== 'skipped') return null;
+      if (r.status === 'done' && !S.isDateText(r.completedOn)) return null;
+      if (r.movedTo !== undefined && !S.isSaturday(r.movedTo)) return null;
+      // Optional note on this occurrence (added in a later 1.2 update).
+      var note = typeof r.note === 'string' ? r.note.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+      if (r.note !== undefined && (typeof r.note !== 'string' || !note)) return null;
+      // Optional "Skip for now" flag (version 1.3). Only true is stored.
+      if (r.deferred !== undefined && r.deferred !== true) return null;
+      if (!r.status && !r.movedTo && !note && !r.deferred) return null;
+      var c = { taskId: r.taskId, week: r.week, room: r.room, name: S.cleanName(r.name) };
+      if (r.status) c.status = r.status; // 'skipped' from older versions is kept as-is
+      if (r.status === 'done') c.completedOn = r.completedOn;
+      if (r.movedTo) c.movedTo = r.movedTo;
+      if (note) c.note = note;
+      if (r.deferred) c.deferred = true;
+      copy[keys[i]] = c;
+    }
+    return copy;
+  }
+
+  function checkAsNeeded(e) {
+    if (!isId(e.id) || !isId(e.taskId) || !S.roomById(e.room) || !S.cleanName(e.name) || !S.isDateText(e.completedOn)) return null;
+    return { id: e.id, taskId: e.taskId, room: e.room, name: S.cleanName(e.name), completedOn: e.completedOn };
+  }
+
+  function makeLoadChecker(categoryIds) {
+    return function (l) {
+      if (!isId(l.id) || categoryIds.indexOf(l.categoryId) === -1 || typeof l.name !== 'string' || !l.name.trim()) return null;
+      if (W.STAGES.indexOf(l.stage) === -1 || !isCount(l.dryCycles) || !S.isDateText(l.addedOn)) return null;
+      if (!isDateOrNull(l.finishedOn) || typeof l.putAway !== 'boolean' || !isDateOrNull(l.putAwayOn)) return null;
+      if (l.stage === 'finished' && !l.finishedOn) return null;
+      if (l.putAway && l.stage !== 'finished') return null;
+      return {
+        id: l.id, categoryId: l.categoryId, name: l.name.trim().slice(0, 60), stage: l.stage,
+        dryCycles: l.dryCycles, addedOn: l.addedOn, finishedOn: l.finishedOn,
+        putAway: l.putAway, putAwayOn: l.putAwayOn
+      };
+    };
+  }
+
+  function checkLaundry(laundry) {
+    if (!isPlainObject(laundry)) return null;
+    var categories = checkList(laundry.categories, function (c) {
+      return isId(c.id) && typeof c.name === 'string' && c.name.trim() ? { id: c.id, name: c.name.trim() } : null;
+    });
+    if (!categories || !categories.length || !allUnique(categories)) return null;
+    var checkLoad = makeLoadChecker(categories.map(function (c) { return c.id; }));
+    var loads = checkList(laundry.loads, checkLoad);
+    var archive = checkList(laundry.archive, checkLoad);
+    if (!loads || !archive || !allUnique(loads.concat(archive))) return null;
+    // One washer and one dryer: never more than one load in each.
+    var inWasher = loads.filter(function (l) { return l.stage === 'washer'; }).length;
+    var inDryer = loads.filter(function (l) { return l.stage === 'dryer'; }).length;
+    if (inWasher > 1 || inDryer > 1) return null;
+    if (archive.some(function (l) { return l.stage !== 'finished'; })) return null;
+    return { categories: categories, loads: loads, archive: archive };
+  }
+
+  function checkLegacy(legacy) {
+    if (legacy === null || legacy === undefined) return null;
+    if (!isPlainObject(legacy) || !S.isDateText(legacy.archivedOn)) return false;
+    var old = checkV1Data({ chores: legacy.chores, supplies: [], pets: [], history: legacy.history });
+    if (!old) return false;
+    var copy = { archivedOn: legacy.archivedOn, chores: old.chores, history: old.history };
+    if (typeof legacy.note === 'string') copy.note = legacy.note.slice(0, 300);
+    return copy;
+  }
+
+  // Checks every part of version 1.2 data and returns a clean copy.
+  // Returns { ok: true, state } or { ok: false, error }.
+  function validateState(data) {
+    function fail(part) {
+      return { ok: false, error: 'The ' + part + ' in this data ' + (part.slice(-1) === 's' ? 'are' : 'is') + ' damaged.' };
+    }
+    if (!isPlainObject(data) || data.version !== DATA_VERSION) return { ok: false, error: 'This is not version 1.2 data.' };
+    if (!S.isDateText(data.activatedOn) || !S.isSaturday(data.activatedWeek)) return fail('start date');
+
+    var tasks = checkList(data.tasks, checkTask);
+    if (!tasks || !allUnique(tasks)) return fail('room chores');
+    var records = checkRecords(data.records);
+    if (!records) return fail('completion records');
+    var asNeeded = checkList(data.asNeeded, checkAsNeeded);
+    if (!asNeeded) return fail('as-needed records');
+    var laundry = checkLaundry(data.laundry);
+    if (!laundry) return fail('laundry loads');
+    var lists = checkV1Data({ chores: [], supplies: data.supplies, pets: data.pets, history: {} });
+    if (!lists) return fail('supplies or cat-care lists');
+    var supplyCategories = checkSupplyCategories(data.supplyCategories);
+    if (!supplyCategories) return fail('supply categories');
+    var supplies = checkSupplyExtras(data.supplies, lists.supplies, supplyCategories);
+    if (!supplies) return fail('supplies or cat-care lists');
+    var legacy = checkLegacy(data.legacy);
+    if (legacy === false) return fail('version 1.1 archive');
+    var prep = checkPrep(data.prep);
+    if (!prep) return fail('next-week prep answers');
+    var reviews = checkReviews(data.reviews);
+    if (!reviews) return fail('week reviews');
+
+    return {
+      ok: true,
+      state: {
+        version: DATA_VERSION,
+        activatedOn: data.activatedOn,
+        activatedWeek: data.activatedWeek,
+        tasks: tasks,
+        records: records,
+        asNeeded: asNeeded,
+        prep: prep,
+        reviews: reviews,
+        laundry: laundry,
+        supplies: supplies,
+        supplyCategories: supplyCategories,
+        pets: lists.pets,
+        legacy: legacy
+      }
+    };
+  }
+
+  // ---------- Backups ----------
+
+  function createBackup(state, now) {
+    return {
+      app: 'household-reset',
+      backupVersion: BACKUP_VERSION,
+      exportedAt: now.toISOString(),
+      data: state
+    };
+  }
+
+  function summarize(state, kind, exportedAt) {
+    var done = Object.keys(state.records).filter(function (k) { return state.records[k].status === 'done'; }).length;
+    return {
+      kind: kind, // 'v1' or 'v2'
+      exportedAt: typeof exportedAt === 'string' ? exportedAt : null,
+      tasks: state.tasks.length,
+      completions: done + state.asNeeded.length,
+      loads: state.laundry.loads.length + state.laundry.archive.length,
+      supplies: state.supplies.length,
+      pets: state.pets.length,
+      legacyWeeks: state.legacy ? Object.keys(state.legacy.history).length : 0
+    };
+  }
+
+  function choreKey(chore) {
+    return chore.name.toLowerCase() + '|' + chore.recurring;
+  }
+
+  // Restoring a version 1.1 backup into version 1.2 data that's already in use.
+  // A 1.1 backup only knows about supplies, cats, and old chores, so it only
+  // changes those:
+  //  - Supplies and Cats are replaced by the backup's lists.
+  //  - Old chores and weekly scores are ADDED to the version 1.1 archive.
+  //    Weeks and chores already archived are kept as they are, and nothing
+  //    is added twice, so restoring the same file again changes nothing.
+  //  - Room chores, schedules, completion history, and laundry are kept.
+  // `current` must already be checked; it is copied, never changed.
+  // A text version of a value that ignores the order of keys, for comparing.
+  function sameValue(a, b) {
+    function canon(v) {
+      if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+      if (v && typeof v === 'object') {
+        return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}';
+      }
+      return JSON.stringify(v);
+    }
+    return canon(a) === canon(b);
+  }
+
+  function mergeV1Backup(current, v1Data, today) {
+    var merged = JSON.parse(JSON.stringify(current));
+    var legacy = merged.legacy || { archivedOn: today, chores: [], history: {} };
+    // weeks/chores: added. identical*: already archived, exactly the same.
+    // conflict*: already archived but different in the backup. The archived
+    // version is always kept; the backup's version is not imported.
+    var added = { weeks: 0, identicalWeeks: 0, conflictWeeks: [], chores: 0, identicalChores: 0, conflictChores: [] };
+
+    Object.keys(v1Data.history).sort().forEach(function (week) {
+      var existing = legacy.history[week];
+      if (!existing) {
+        legacy.history[week] = v1Data.history[week];
+        added.weeks++;
+      } else if (sameValue(existing, v1Data.history[week])) {
+        added.identicalWeeks++;
+      } else {
+        added.conflictWeeks.push({ week: week, weekStart: existing.weekStart });
+      }
+    });
+
+    var byId = {};
+    var names = {};
+    legacy.chores.forEach(function (c) { byId[c.id] = c; names[choreKey(c)] = true; });
+    v1Data.chores.forEach(function (c) {
+      var sameId = byId[c.id];
+      if (sameId) {
+        if (sameValue(sameId, c)) added.identicalChores++;
+        else added.conflictChores.push({ id: c.id, archivedName: sameId.name, backupName: c.name });
+        return;
+      }
+      if (names[choreKey(c)]) {
+        added.identicalChores++; // the same chore saved on another device
+        return;
+      }
+      legacy.chores.push(c);
+      byId[c.id] = c;
+      names[choreKey(c)] = true;
+      added.chores++;
+    });
+
+    merged.legacy = legacy;
+    merged.supplies = v1Data.supplies;
+    merged.pets = v1Data.pets;
+    return { state: merged, added: added };
+  }
+
+  // Checks a backup file's text. Returns { ok: true, state, summary } or
+  // { ok: false, error }. It never saves anything.
+  //  - Version 1.2 backups contain everything, so they replace everything.
+  //  - Version 1.1 backups: if `current` (the version 1.2 data in use) is
+  //    given, they're merged into it (see mergeV1Backup). Without `current`
+  //    they're upgraded the same way as saved 1.1 data.
+  function validateBackup(text, today, current) {
+    var notBackup = "This file isn't a Household Reset backup.";
+    if (typeof text !== 'string' || text.trim() === '') return { ok: false, error: 'This file is empty.' };
+    if (text.length > MAX_BACKUP_CHARACTERS) return { ok: false, error: 'This file is too large to be a Household Reset backup.' };
+    var file = parseJSON(text);
+    if (file === undefined) return { ok: false, error: notBackup + ' It could not be read as JSON.' };
+    if (!isPlainObject(file) || file.app !== 'household-reset' || !isPlainObject(file.data)) {
+      return { ok: false, error: notBackup };
+    }
+
+    if (file.backupVersion === 1) {
+      var old = L.validateBackup(text); // version 1.1's own checks
+      if (!old.ok) return old;
+      if (current) {
+        var checkedCurrent = validateState(current);
+        if (!checkedCurrent.ok) {
+          return { ok: false, error: 'Your current data could not be checked, so this backup was not merged into it.' };
+        }
+        var merge = mergeV1Backup(checkedCurrent.state, old.state, today);
+        var mergeSummary = summarize(merge.state, 'v1', file.exportedAt);
+        mergeSummary.mode = 'merge';
+        mergeSummary.added = merge.added;
+        return { ok: true, state: merge.state, summary: mergeSummary };
+      }
+      var upgraded = createState(today, old.state);
+      var freshSummary = summarize(upgraded, 'v1', file.exportedAt);
+      freshSummary.mode = 'fresh';
+      return { ok: true, state: upgraded, summary: freshSummary };
+    }
+    if (file.backupVersion === BACKUP_VERSION) {
+      var checked = validateState(file.data);
+      if (!checked.ok) return { ok: false, error: checked.error.replace('this data', 'this backup') };
+      S.addMissingDefaultSupplies(checked.state); // same compatibility step as loading
+      return { ok: true, state: checked.state, summary: summarize(checked.state, 'v2', file.exportedAt) };
+    }
+    if (typeof file.backupVersion === 'number' && file.backupVersion > BACKUP_VERSION) {
+      return { ok: false, error: 'This backup was made by a newer version of Household Reset.' };
+    }
+    return { ok: false, error: notBackup };
+  }
+
+  global.HouseholdStorage = {
+    KEY_V1: KEY_V1,
+    KEY_V2: KEY_V2,
+    DATA_VERSION: DATA_VERSION,
+    BACKUP_VERSION: BACKUP_VERSION,
+    createState: createState,
+    migrateFromV1: migrateFromV1,
+    mergeV1Backup: mergeV1Backup,
+    loadState: loadState,
+    rawSavedData: rawSavedData,
+    saveState: saveState,
+    validateState: validateState,
+    createBackup: createBackup,
+    validateBackup: validateBackup
+  };
+})(typeof window !== 'undefined' ? window : globalThis);

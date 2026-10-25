@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fbf6ef">
+  <meta name="description" content="Household Reset: a cozy room-by-room cleaning calendar, laundry tracker, supplies list, and cat-care checklist.">
+  <title>Household Reset</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏡</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Household Reset</h1>
+    <p class="tagline" id="week-label">Your cozy weekly reset</p>
+  </header>
+
+  <nav class="tabs" aria-label="Sections">
+    <button class="tab" type="button" data-tab="rooms" aria-selected="true">Rooms</button>
+    <button class="tab" type="button" data-tab="supplies" aria-selected="false">Supplies</button>
+    <button class="tab" type="button" data-tab="pets" aria-selected="false">Cats</button>
+    <button class="tab" type="button" data-tab="history" aria-selected="false">History</button>
+  </nav>
+
+  <main>
+    <!-- Rooms: week navigator, overview, room cards -->
+    <section class="panel" id="panel-rooms" data-panel="rooms">
+      <div class="notice" id="app-notice" role="status" hidden>
+        <p id="app-notice-text"></p>
+        <div class="notice-actions" id="app-notice-actions"></div>
+        <button type="button" class="btn btn-quiet" id="app-notice-close">Got it</button>
+      </div>
+
+      <div class="card week-card">
+        <div class="week-nav">
+          <button type="button" class="btn btn-quiet nav-btn" id="prev-week" aria-label="Previous week">‹</button>
+          <div class="week-title">
+            <span class="eyebrow" id="week-eyebrow">This cleaning week</span>
+            <strong id="week-range"></strong>
+          </div>
+          <button type="button" class="btn btn-quiet nav-btn" id="next-week" aria-label="Next week">›</button>
+        </div>
+        <button type="button" class="btn btn-quiet this-week-btn" id="this-week" hidden>↩ Back to this week</button>
+        <div class="stats" id="overview-stats"></div>
+        <div class="progress-track" role="progressbar" aria-label="Chores completed in the selected week"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <p class="hint" id="week-note">Cleaning weeks run Saturday to Friday.</p>
+        <div class="review-row" id="review-row">
+          <button type="button" class="btn btn-quiet" id="finish-week">Finish Cleaning Week</button>
+          <button type="button" class="btn btn-small" id="undo-review" hidden>Undo week review</button>
+          <span class="chip chip-reviewed" id="review-status" hidden></span>
+        </div>
+      </div>
+
+      <!-- Finish Cleaning Week (an optional review of one week) -->
+      <section class="card review-view" id="review-view" aria-labelledby="review-title" hidden></section>
+
+      <!-- The list of rooms (the "home" of this tab) -->
+      <div id="rooms-home">
+        <section class="card heads-up" aria-labelledby="heads-up-title">
+          <h2 id="heads-up-title">Heads up</h2>
+          <p class="hint" id="heads-up-scope"></p>
+          <div id="heads-up-groups"></div>
+        </section>
+
+        <h2 class="section-title">Rooms</h2>
+        <div class="room-grid" id="room-grid"></div>
+
+        <details class="card prep-card" id="prep-card">
+          <summary class="prep-summary">
+            <span class="prep-heading">Get ready for next week</span>
+            <span class="chip prep-count" id="prep-count"></span>
+          </summary>
+          <p class="hint" id="prep-scope"></p>
+          <ul class="prep-list" id="prep-list"></ul>
+        </details>
+
+        <div class="card legend">
+          <h2>Colour key</h2>
+          <ul class="legend-list" id="legend-list"></ul>
+        </div>
+      </div>
+
+      <!-- One room's checklist (shown after tapping a room card) -->
+      <div id="room-view" hidden>
+        <button type="button" class="btn btn-quiet back-btn" id="back-to-rooms">‹ All rooms</button>
+        <div class="card room-header">
+          <div class="progress-text">
+            <h2 id="room-title"></h2>
+            <span id="room-progress-text"></span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-label="Room chores completed"
+               aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="room-progress-bar">
+            <div class="progress-fill" id="room-progress-fill"></div>
+          </div>
+          <p class="chip chip-overdue laundry-late-note" id="laundry-late-note" role="status" hidden></p>
+        </div>
+        <div id="room-content"></div>
+      </div>
+    </section>
+
+    <!-- Household supplies -->
+    <section class="panel" id="panel-supplies" data-panel="supplies" hidden>
+      <div class="card">
+        <h2>Household supplies</h2>
+        <p class="hint">Ticked = stocked (you have it). Unticked = needed. Tap a category to open or close it.</p>
+      </div>
+
+      <form class="add-form supply-add-form" id="supply-add-form">
+        <label class="visually-hidden" for="add-supply">New supply</label>
+        <input id="add-supply" name="name" type="text" placeholder="Add a supply…" autocomplete="off" maxlength="80">
+        <label class="visually-hidden" for="add-supply-category">Category</label>
+        <select id="add-supply-category" name="category"></select>
+        <button type="submit" class="btn btn-primary">Add</button>
+      </form>
+      <div class="supply-tab-msg" id="supply-tab-msg" role="status"></div>
+
+      <div class="supply-categories" id="list-supplies"></div>
+
+      <form class="add-form new-category-form" id="new-category-form">
+        <label class="visually-hidden" for="new-category">New category name</label>
+        <input id="new-category" name="name" type="text" placeholder="New category…" autocomplete="off" maxlength="40">
+        <button type="submit" class="btn btn-quiet">Add category</button>
+      </form>
+      <button type="button" class="btn btn-quiet" id="uncheck-supplies">Untick all supplies</button>
+    </section>
+
+    <!-- Cat care -->
+    <section class="panel" id="panel-pets" data-panel="pets" hidden>
+      <div class="card">
+        <h2>Cat care 🐈 🐈</h2>
+        <p class="hint">A daily checklist for two cats. It unchecks itself each morning.</p>
+      </div>
+
+      <form class="add-form" data-list="pets">
+        <label class="visually-hidden" for="add-pet">New cat task</label>
+        <input id="add-pet" name="name" type="text" placeholder="Add a cat task…" autocomplete="off" maxlength="80">
+        <button type="submit" class="btn btn-primary">Add</button>
+      </form>
+
+      <ul class="item-list" id="list-pets"></ul>
+    </section>
+
+    <!-- Past weeks -->
+    <section class="panel" id="panel-history" data-panel="history" hidden>
+      <div class="card">
+        <h2>Cleaning history</h2>
+        <p class="hint">Each past cleaning week: what was done (and when), skipped, or missed.</p>
+      </div>
+      <ul class="history-list" id="list-history"></ul>
+
+      <div id="legacy-section" hidden>
+        <div class="card">
+          <h2>Version 1.1 archive</h2>
+          <p class="hint" id="legacy-note">Your weekly scores and chore list from before rooms were added. Kept for reference; nothing here is active.</p>
+        </div>
+        <ul class="history-list" id="legacy-history"></ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- Backup & Restore (shown under every tab) -->
+  <section class="backup-area" aria-labelledby="backup-title">
+    <div class="card backup-card">
+      <h2 id="backup-title">Backup &amp; Restore</h2>
+      <p class="hint">
+        Save a copy of everything — room chores and schedules, completion history, laundry loads, supplies, cat care, and your version 1.1 archive — as a file.
+        Use it to recover your lists, or to move them to another device.
+      </p>
+
+      <div class="backup-actions">
+        <button type="button" class="btn btn-primary" id="download-backup">Download backup</button>
+        <input type="file" id="restore-file" class="visually-hidden" accept=".json,application/json">
+        <label for="restore-file" class="btn btn-quiet file-button">Restore from backup…</label>
+      </div>
+
+      <div class="restore-confirm" id="restore-confirm" role="group" aria-labelledby="restore-title" hidden>
+        <p class="restore-title" id="restore-title">Replace your current data?</p>
+        <p id="restore-summary" class="restore-summary"></p>
+        <p id="restore-warning"></p>
+        <div class="backup-actions">
+          <button type="button" class="btn btn-warning" id="confirm-restore">Replace my data</button>
+          <button type="button" class="btn btn-quiet" id="cancel-restore">Cancel</button>
+        </div>
+      </div>
+
+      <p class="backup-status" id="backup-status" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <footer class="app-footer">
+    <p>
+      <strong>Where is my data?</strong> Everything is saved only in this browser on this device
+      (using <em>localStorage</em>). It does not sync between your iPad and phone, and clearing
+      your browser's website data will erase it.
+    </p>
+  </footer>
+
+  <script src="logic.js"></script>
+  <script src="schedule.js"></script>
+  <script src="laundry.js"></script>
+  <script src="storage.js"></script>
+  <script src="prep.js"></script>
+  <script src="review.js"></script>
+  <script src="supplies.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

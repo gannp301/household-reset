@@ -1,0 +1,1730 @@
+/*
+ * styles.css — how Household Reset looks.
+ * Colours live in one place (:root) so they're easy to change later.
+ */
+:root {
+  --cream: #fbf6ef;
+  --cream-deep: #f3eadf;
+  --card: #fffdf9;
+  --blush: #f4d9d9;
+  --blush-strong: #e8b4b8;
+  --blush-deep: #b85f6e; /* darker pink for text on cream, readable */
+  --charcoal: #2f2f33;
+  --charcoal-soft: #5c5a5e;
+  --line: #eadccf;
+  --danger: #a8404f;
+  --radius: 18px;
+  --tap: 52px; /* minimum size of anything you tap */
+  --shadow: 0 2px 10px rgba(47, 47, 51, 0.06);
+
+  /* Frequency colours (version 1.2): a soft background plus a darker,
+     readable text colour. Icons and labels are always shown too. */
+  --weekly-bg: #e1eadb;     --weekly-ink: #3d5a37;     --weekly-line: #8fae86;    /* sage green */
+  --biweekly-bg: #e8e1f1;   --biweekly-ink: #54457a;   --biweekly-line: #a796c8;  /* lavender */
+  --monthly-bg: #dde7f0;    --monthly-ink: #34516b;    --monthly-line: #87a5c0;   /* muted blue */
+  --quarterly-bg: #ece3d8;  --quarterly-ink: #5c4a39;  --quarterly-line: #b39d84; /* warm taupe */
+  --overdue-bg: #fbe8c4;    --overdue-ink: #774700;    --overdue-line: #e0a63b;   /* amber */
+  --asneeded-bg: #ececea;   --asneeded-ink: #4d4d50;   --asneeded-line: #a9a9a6;  /* neutral grey */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Anything marked "hidden" stays hidden, even if another rule sets display */
+[hidden] {
+  display: none !important;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent; /* no grey/blue flash when tapping */
+}
+
+button,
+summary,
+.toggle {
+  -webkit-user-select: none;
+  user-select: none; /* tapping shouldn't highlight button text */
+}
+
+body {
+  margin: 0;
+  background: var(--cream);
+  color: var(--charcoal);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1.5;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+h1, h2 {
+  margin: 0;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 1.9rem;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: 1.25rem;
+}
+
+.app-header,
+.tabs,
+main,
+.backup-area,
+.app-footer {
+  max-width: 720px;
+  margin: 0 auto;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.app-header {
+  padding-top: max(24px, env(safe-area-inset-top));
+  padding-bottom: 8px;
+}
+
+.tagline {
+  margin: 4px 0 0;
+  color: var(--charcoal-soft);
+}
+
+/* ---------- Tabs ---------- */
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: var(--cream);
+}
+
+.tab {
+  min-height: var(--tap);
+  border: none;
+  border-radius: 999px;
+  background: var(--cream-deep);
+  color: var(--charcoal);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab[aria-selected="true"] {
+  background: var(--blush-strong);
+}
+
+/* ---------- Cards & progress ---------- */
+.panel {
+  padding-top: 8px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
+  margin-bottom: 14px;
+}
+
+.hint {
+  margin: 8px 0 0;
+  font-size: 0.95rem;
+  color: var(--charcoal-soft);
+}
+
+.progress-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+#progress-count {
+  font-weight: 600;
+  color: var(--blush-deep);
+}
+
+.progress-track {
+  height: 18px;
+  background: var(--cream-deep);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--blush-strong), var(--blush-deep));
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+/* ---------- Add form ---------- */
+.add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.add-form input[type="text"] {
+  flex: 1 1 220px;
+}
+
+input[type="text"] {
+  min-height: var(--tap);
+  padding: 0 16px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--charcoal);
+  font: inherit; /* 18px stops iPhone from zooming in on focus */
+}
+
+input[type="text"]:focus {
+  outline: none;
+  border-color: var(--blush-deep);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 0 4px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--blush-deep);
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 20px;
+  border: none;
+  border-radius: 14px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--charcoal);
+  color: var(--cream);
+}
+
+.btn-quiet {
+  background: var(--cream-deep);
+  color: var(--charcoal);
+}
+
+.btn-small {
+  padding: 0 14px;
+  font-size: 0.95rem;
+  background: transparent;
+  color: var(--charcoal-soft);
+}
+
+.btn-danger {
+  color: var(--danger);
+}
+
+.btn:active,
+.tab:active,
+.check:active {
+  transform: scale(0.97);
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+}
+
+/* ---------- Checklist items ---------- */
+.item-list,
+.history-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 68px;
+  padding: 8px 8px 8px 12px;
+  margin-bottom: 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.item.done {
+  background: var(--blush);
+  border-color: var(--blush-strong);
+}
+
+.check {
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+  border: 3px solid var(--blush-strong);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--charcoal);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.item.done .check {
+  background: var(--blush-deep);
+  border-color: var(--blush-deep);
+  color: #fff;
+}
+
+.item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-name {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.item.done .item-name {
+  text-decoration: line-through;
+  color: var(--charcoal-soft);
+}
+
+.badge {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: var(--cream-deep);
+  font-size: 0.8rem;
+  color: var(--charcoal-soft);
+}
+
+.item-actions {
+  display: flex;
+  flex: none;
+}
+
+/* Editing a row */
+.edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.edit-form input[type="text"] {
+  flex: 1 1 200px;
+}
+
+.empty {
+  padding: 18px;
+  text-align: center;
+  color: var(--charcoal-soft);
+}
+
+/* ---------- History ---------- */
+.history-item {
+  margin-bottom: 10px;
+}
+
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+}
+
+.history-item .progress-track {
+  height: 10px;
+  margin-top: 10px;
+}
+
+.history-item details {
+  margin-top: 8px;
+  font-size: 0.95rem;
+  color: var(--charcoal-soft);
+}
+
+.history-item summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* ---------- Backup & Restore ---------- */
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+/* The "Restore" label is styled to look like a button; it opens the file picker */
+.file-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#restore-file:focus-visible + .file-button {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+}
+
+.btn-warning {
+  background: var(--danger);
+  color: #fff;
+}
+
+.restore-confirm {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--blush);
+  border: 1px solid var(--blush-strong);
+}
+
+.restore-confirm p {
+  margin: 0 0 8px;
+}
+
+.restore-summary {
+  white-space: pre-line; /* shows each "•" point on its own line */
+}
+
+.restore-title {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.backup-status {
+  margin: 12px 0 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.backup-status:empty {
+  display: none;
+}
+
+.backup-status.error {
+  color: var(--danger);
+}
+
+/* ---------- Version 1.2: notices and form controls ---------- */
+.notice {
+  background: var(--blush);
+  border: 1px solid var(--blush-strong);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.notice p {
+  margin: 0 0 10px;
+}
+
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notice-actions:empty {
+  display: none;
+}
+
+.week-laundry-total {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+select {
+  min-height: var(--tap);
+  max-width: 100%;
+  padding: 0 12px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--charcoal);
+  font: inherit;
+  font-size: 1rem;
+}
+
+select:focus-visible,
+.room-card:focus-visible {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.section-title {
+  margin: 20px 0 10px;
+}
+
+/* ---------- Week navigator and overview ---------- */
+.week-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-btn {
+  flex: none;
+  padding: 0;
+  width: var(--tap);
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.week-title {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.week-title strong {
+  display: block;
+  font-size: 1.05rem;
+}
+
+.eyebrow {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--blush-deep);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.this-week-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 14px 0 12px;
+}
+
+.stat {
+  background: var(--cream);
+  border-radius: 14px;
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.stat-num {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.stat-label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--charcoal-soft);
+}
+
+.stat-overdue {
+  background: var(--overdue-bg);
+  color: var(--overdue-ink);
+}
+
+.stat-overdue .stat-label {
+  color: var(--overdue-ink);
+}
+
+/* ---------- Heads up ---------- */
+.legend-list,
+.hu-list,
+.hu-items,
+.prep-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.legend-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hu-list > li + li {
+  margin-top: 8px;
+}
+
+.hu-group {
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--line);
+  border-radius: 14px;
+  background: var(--cream);
+}
+
+.hu-overdue {
+  border-left-color: var(--overdue-line);
+  background: var(--overdue-bg);
+  color: var(--overdue-ink);
+}
+
+.hu-due {
+  border-left-color: var(--monthly-line);
+}
+
+.hu-soon {
+  border-left-color: var(--quarterly-line);
+}
+
+/* The row you tap: icon, summary, and "Show details" */
+.hu-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.hu-summary::-webkit-details-marker {
+  display: none;
+}
+
+.hu-summary:focus-visible,
+.prep-summary:focus-visible {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+  border-radius: 14px;
+}
+
+.hu-icon {
+  flex: none;
+  font-size: 1.1rem;
+}
+
+.hu-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.hu-title {
+  display: block;
+  font-size: 1rem;
+}
+
+.hu-sub {
+  display: block;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.hu-toggle {
+  flex: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.hu-items {
+  margin: 0;
+  padding: 0 12px 10px;
+}
+
+.hu-item {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  color: var(--charcoal);
+}
+
+.hu-item-name {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.hu-clear {
+  margin: 8px 0 0;
+  font-size: 0.95rem;
+  color: var(--charcoal-soft);
+}
+
+/* ---------- Get ready for next week ---------- */
+.prep-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--tap);
+  cursor: pointer;
+  list-style: none;
+}
+
+.prep-summary::-webkit-details-marker {
+  display: none;
+}
+
+.prep-heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.prep-heading::before {
+  content: "▸ ";
+  color: var(--blush-deep);
+}
+
+.prep-card[open] .prep-heading::before {
+  content: "▾ ";
+}
+
+.prep-count {
+  background: var(--blush);
+  color: var(--charcoal);
+}
+
+.prep-item {
+  padding: 12px 12px 12px 14px;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--f-line);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+.prep-question,
+.prep-answer {
+  margin: 0 0 2px;
+  font-weight: 600;
+}
+
+.prep-status {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  color: var(--charcoal-soft);
+}
+
+.prep-chores {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: 0.9rem;
+}
+
+.prep-chores li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.prep-chore::before {
+  content: "For: ";
+  color: var(--charcoal-soft);
+}
+
+/* Smaller side-by-side buttons that still meet the 44px tap size */
+.btn-compact {
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: 0.95rem;
+  flex: 1 1 auto;
+}
+
+.prep-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.supplies-input {
+  flex-basis: 100% !important;
+}
+
+/* ---------- Room cards ---------- */
+.room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.room-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-height: 120px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  color: var(--charcoal);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.room-card:active {
+  transform: scale(0.98);
+}
+
+.room-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.room-icon {
+  font-size: 1.6rem;
+}
+
+.room-name {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.room-meta {
+  font-size: 0.95rem;
+  color: var(--charcoal-soft);
+}
+
+.progress-track.mini {
+  height: 8px;
+}
+
+.chip {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.chip-overdue {
+  background: var(--overdue-bg);
+  color: var(--overdue-ink);
+}
+
+/* Compact put-away reminder under the Laundry room heading */
+.laundry-late-note {
+  display: inline-block;
+  margin: 10px 0 0;
+}
+
+/* ---------- Inside a room ---------- */
+.back-btn {
+  margin-bottom: 12px;
+}
+
+.room-section h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.room-section .item-list {
+  margin: 12px 0 0;
+}
+
+.room-section .item {
+  box-shadow: none;
+}
+
+.overdue-section {
+  border-color: var(--overdue-line);
+}
+
+.task-row {
+  flex-direction: column;
+  align-items: stretch;
+  border-left-width: 6px;
+}
+
+.row-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+
+.move-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.badges .badge {
+  margin-top: 0;
+}
+
+/* Frequency colours: badge, left edge of each row, and next-week prep items */
+.freq-weekly { --f-bg: var(--weekly-bg); --f-ink: var(--weekly-ink); --f-line: var(--weekly-line); }
+.freq-biweekly { --f-bg: var(--biweekly-bg); --f-ink: var(--biweekly-ink); --f-line: var(--biweekly-line); }
+.freq-monthly { --f-bg: var(--monthly-bg); --f-ink: var(--monthly-ink); --f-line: var(--monthly-line); }
+.freq-quarterly { --f-bg: var(--quarterly-bg); --f-ink: var(--quarterly-ink); --f-line: var(--quarterly-line); }
+.freq-asneeded { --f-bg: var(--asneeded-bg); --f-ink: var(--asneeded-ink); --f-line: var(--asneeded-line); }
+
+.badge.freq {
+  background: var(--f-bg);
+  color: var(--f-ink);
+  font-weight: 600;
+}
+
+.task-row,
+.manage-row {
+  border-left-color: var(--f-line);
+}
+
+.manage-row {
+  border-left-width: 6px;
+  flex-wrap: wrap;
+}
+
+.badge.status-overdue {
+  background: var(--overdue-bg);
+  color: var(--overdue-ink);
+  font-weight: 600;
+  white-space: nowrap; /* keep "Overdue from Oct 24" on one line */
+}
+
+.task-row.status-overdue {
+  background: #fff7e8;
+}
+
+.badge.status-done {
+  background: var(--card);
+  color: var(--charcoal);
+}
+
+.badge.status-moved,
+.badge.status-upcoming,
+.badge.status-skipped {
+  background: var(--cream-deep);
+  color: var(--charcoal-soft);
+}
+
+.task-row.status-skipped .item-name {
+  color: var(--charcoal-soft);
+  font-style: italic;
+}
+
+.task-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.task-form input[type="text"] {
+  flex: 1 1 220px;
+}
+
+.form-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* ---------- Notes, carry-over preview, and Heads up context ---------- */
+.note-badge {
+  background: var(--cream-deep);
+  color: var(--charcoal);
+}
+
+.note-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.note-wrap .note-input {
+  flex: 1 1 220px;
+}
+
+.hu-note {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--charcoal-soft);
+}
+
+.hu-scope-other {
+  font-weight: 600;
+  color: var(--blush-deep);
+}
+
+.carry-preview {
+  border-style: dashed;
+}
+
+.prep-message {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--cream);
+  font-size: 0.9rem;
+}
+
+/* ---------- Finish Cleaning Week ---------- */
+.review-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.chip-reviewed {
+  background: var(--weekly-bg);
+  color: var(--weekly-ink);
+}
+
+.review-view {
+  border-color: var(--blush-strong);
+}
+
+.review-view h2:focus {
+  outline: none;
+}
+
+.review-range {
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+
+.review-stats {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.review-room {
+  margin: 18px 0 6px;
+  font-size: 1.05rem;
+}
+
+.review-list,
+.review-summary {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.review-summary li {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--cream);
+  font-weight: 600;
+}
+
+.review-item {
+  padding: 12px 12px 12px 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--f-line);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+.review-item-name {
+  display: block;
+  font-weight: 600;
+}
+
+/* Two side-by-side choices built from radio buttons */
+.choice {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 8px;
+  padding: 0;
+  border: none;
+}
+
+.choice-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--cream);
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.choice-option:has(input:checked) {
+  border-color: var(--blush-deep);
+  background: var(--blush);
+}
+
+.choice-option input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--blush-deep);
+}
+
+.choice-option:focus-within {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+}
+
+.review-note {
+  width: 100%;
+}
+
+.review-supply {
+  margin-top: 8px;
+}
+
+.review-supply-summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 600;
+  color: var(--blush-deep);
+  cursor: pointer;
+}
+
+.supply-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.supply-status {
+  margin: 6px 0 0;
+}
+
+/* ---------- Add needed supply ---------- */
+.supply-adder {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--cream);
+}
+
+.supply-adder-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.suggested-label {
+  font-size: 0.85rem;
+  color: var(--charcoal-soft);
+}
+
+.supply-suggestions {
+  align-items: center;
+}
+
+.supply-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.supply-row .supply-name {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.supply-msg {
+  margin: 6px 0 0;
+  font-weight: 600;
+}
+
+.supply-msg:empty {
+  display: none;
+}
+
+.supply-msg.success {
+  color: var(--weekly-ink);
+}
+
+.supply-msg.error {
+  color: var(--danger);
+}
+
+/* ---------- Week review: room selector and All done ---------- */
+.review-rooms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 6px;
+}
+
+.room-pill {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--charcoal);
+  font-size: 0.95rem;
+}
+
+.room-pill[aria-pressed="true"] {
+  border-color: var(--blush-deep);
+  background: var(--blush);
+  font-weight: 700;
+}
+
+.room-pill-done {
+  background: var(--weekly-bg);
+  color: var(--weekly-ink);
+}
+
+.review-reviewing {
+  margin: 10px 0 4px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.all-done {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--weekly-bg);
+  color: var(--weekly-ink);
+  font-weight: 600;
+}
+
+.reviewed-done {
+  margin-top: 10px;
+}
+
+.reviewed-done > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 600;
+  color: var(--charcoal-soft);
+  cursor: pointer;
+}
+
+/* ---------- Supplies categories (version 1.3) ---------- */
+.supply-add-form select {
+  flex: 1 1 160px;
+}
+
+.supply-tab-msg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.supply-tab-msg:empty {
+  display: none;
+}
+
+.supply-msg.info {
+  color: var(--charcoal);
+}
+
+.supply-cat {
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+/* The category header you tap to open or close it */
+.supply-cat-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 8px 16px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.supply-cat-summary::-webkit-details-marker,
+.freq-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.supply-cat-summary::before,
+.freq-group-summary::before {
+  content: "▸";
+  color: var(--blush-deep);
+}
+
+.supply-cat[open] > .supply-cat-summary::before,
+.freq-group[open] > .freq-group-summary::before {
+  content: "▾";
+}
+
+.supply-cat-name {
+  flex: 1;
+}
+
+.supply-cat-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--charcoal-soft);
+}
+
+.supply-cat-summary:focus-visible,
+.freq-group-summary:focus-visible {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+.supply-cat .item-list {
+  margin: 0;
+  padding: 0 10px;
+}
+
+.supply-cat .item {
+  box-shadow: none;
+}
+
+.supply-note {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--charcoal-soft);
+  overflow-wrap: anywhere;
+}
+
+.supply-edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.supply-edit-form input[type="text"] {
+  flex: 1 1 200px;
+}
+
+.category-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 10px 10px;
+  border-top: 1px solid var(--line);
+}
+
+.category-rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.category-rename-form input[type="text"] {
+  flex: 1 1 160px;
+}
+
+.supply-row .category-select {
+  flex: 1 1 140px;
+}
+
+/* ---------- Room frequency groups (version 1.3) ---------- */
+.freq-group {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--f-line);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+.freq-group-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 6px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.freq-group-count {
+  font-weight: 600;
+  color: var(--charcoal-soft);
+}
+
+.freq-group .item-list {
+  margin: 0;
+  padding: 0 8px 4px;
+}
+
+.edit-heading {
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+
+/* ---------- Laundry put-away from earlier weeks (version 1.3) ---------- */
+.overdue-title {
+  color: var(--overdue-ink);
+}
+
+.load-overdue {
+  border-color: var(--overdue-line);
+  background: #fff7e8;
+}
+
+.badge.status-overdue.load-overdue-label {
+  display: inline-block;
+  margin: 0 0 8px;
+  white-space: normal;
+}
+
+/* ---------- Skip for now panel and Heads up rooms (v1.3 QC) ---------- */
+.skip-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+
+.skip-panel .hint {
+  margin: 0;
+}
+
+.move-label {
+  flex-basis: 100%;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.hu-rooms {
+  padding: 0 10px 10px;
+}
+
+.hu-room {
+  margin-top: 6px;
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--charcoal);
+}
+
+.hu-room-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.hu-room-summary::-webkit-details-marker {
+  display: none;
+}
+
+.hu-room-summary::before {
+  content: "▸";
+  color: var(--blush-deep);
+}
+
+.hu-room[open] > .hu-room-summary::before {
+  content: "▾";
+}
+
+.hu-room-name {
+  flex: 1;
+}
+
+.hu-room-count {
+  min-width: 28px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--cream-deep);
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.hu-room-summary:focus-visible {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+}
+
+.hu-room .hu-items {
+  padding: 0 12px 8px;
+}
+
+/* ---------- Laundry ---------- */
+.laundry-stats {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.machines {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.machine {
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--weekly-bg);
+  color: var(--weekly-ink);
+}
+
+.machine.busy {
+  background: var(--blush);
+  color: var(--charcoal);
+}
+
+.machine-name {
+  display: block;
+  font-weight: 700;
+}
+
+.machine-state {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.laundry-message:empty {
+  display: none;
+}
+
+.laundry-message {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--overdue-bg);
+  color: var(--overdue-ink);
+  font-weight: 600;
+}
+
+.load-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.load-form input[type="text"] {
+  flex: 1 1 160px;
+}
+
+.category-title {
+  margin: 18px 0 8px;
+  font-size: 1rem;
+}
+
+.load-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.load {
+  padding: 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.load.stage-washer,
+.load.stage-dryer {
+  border-color: var(--blush-strong);
+}
+
+.load-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.load-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin: 10px 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  padding: 6px 4px;
+  border-radius: 10px;
+  background: var(--cream-deep);
+  font-size: 0.75rem;
+  text-align: center;
+  color: var(--charcoal-soft);
+}
+
+.step.past {
+  background: var(--blush);
+}
+
+.step.now {
+  background: var(--blush-deep);
+  color: #fff;
+  font-weight: 700;
+}
+
+.load-info {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  color: var(--charcoal-soft);
+}
+
+.load-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.load-blocked {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  color: var(--overdue-ink);
+}
+
+.rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rename-form input[type="text"] {
+  flex: 1 1 180px;
+}
+
+/* ---------- History (version 1.2) ---------- */
+.history-group-title {
+  margin: 10px 0 2px;
+  font-weight: 600;
+  color: var(--charcoal);
+}
+
+.history-lines {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.history-item.legacy {
+  background: var(--cream);
+}
+
+@media (max-width: 480px) {
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .laundry-stats,
+  .review-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .step {
+    font-size: 0.7rem;
+  }
+}
+
+/* ---------- Footer ---------- */
+.app-footer {
+  padding-top: 8px;
+  padding-bottom: 32px;
+  font-size: 0.9rem;
+  color: var(--charcoal-soft);
+}
+
+.app-footer p {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--cream-deep);
+}
+
+/* Hidden from eyes but still read by screen readers */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* On very small phones, tighten the row buttons so names have room */
+@media (max-width: 380px) {
+  .btn-small {
+    padding: 0 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill {
+    transition: none;
+  }
+}

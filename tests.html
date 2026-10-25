@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Household Reset Tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #fbf6ef; color: #2f2f33; margin: 0; padding: 16px; }
+    h1 { font-size: 1.4rem; }
+    #summary { font-size: 1.2rem; font-weight: 700; padding: 12px 16px; border-radius: 12px; }
+    #summary.pass { background: #dcefdc; }
+    #summary.fail { background: #f6d2d2; }
+    h2 { font-size: 1.1rem; margin: 24px 0 4px; }
+    li { padding: 6px 0; }
+    .pass::marker { content: "✅ "; }
+    .fail::marker { content: "❌ "; }
+    .manual { background: #fffdf9; border: 1px solid #eadccf; border-radius: 12px; padding: 4px 16px 12px; margin-top: 28px; }
+    .manual li::marker { content: "☐ "; }
+  </style>
+</head>
+<body>
+  <h1>Household Reset — self-tests</h1>
+  <p>
+    This page automatically checks the app's rules: dates, room schedules, laundry, upgrading from
+    version 1.1, and backups. It uses made-up sample data and <strong>does not read or change your saved lists</strong>.
+  </p>
+  <p id="summary">Running…</p>
+  <div id="results"></div>
+
+  <section class="manual">
+    <h2>Manual checks (not automatic — try these yourself in Safari)</h2>
+    <p>The automatic tests above can't tap buttons on your iPad. These still need a person:</p>
+    <ul>
+      <li>Download a backup in the app and find it in the Files app → Downloads.</li>
+      <li>Restore that file: check the confirmation message, tap Cancel, then restore for real.</li>
+      <li>Open a room, tick a chore, reload the page, and check it's still ticked.</li>
+      <li>Use ‹ and › to visit other weeks, then tap "This week" to come back.</li>
+      <li>Move a laundry load through all four steps, then mark it put away.</li>
+      <li>Laundry has no percentage bar. With a load finished last week and not put away, the Laundry screen says "1 load to put away" with an amber reminder; after Mark put away it says "Nothing needs putting away" (and still mentions any loads waiting, washing, or drying).</li>
+      <li>Tap Finish Cleaning Week, choose Carry Over or Done, check the summary, and confirm.</li>
+      <li>Add a note to a chore (More → Add note) and find it in Heads up details and History.</li>
+      <li>On Supplies, open and close categories, add a supply to a category, and move one with Edit.</li>
+      <li>In a room, open a frequency group under All chores, and use More → Edit chore on a checklist item.</li>
+      <li>Check every button is easy to tap and the text is easy to read.</li>
+    </ul>
+  </section>
+
+  <script src="logic.js"></script>
+  <script src="schedule.js"></script>
+  <script src="laundry.js"></script>
+  <script src="storage.js"></script>
+  <script src="prep.js"></script>
+  <script src="review.js"></script>
+  <script src="supplies.js"></script>
+  <script>
+    var L = window.HouseholdLogic;
+    var results = [];
+    var currentSection = 'Version 1.0 & 1.1 basics';
+
+    // Starts a new group of tests with a heading on the page.
+    function section(name) {
+      currentSection = name;
+    }
+
+    function test(name, fn) {
+      try {
+        fn();
+        results.push({ section: currentSection, name: name, ok: true });
+      } catch (err) {
+        results.push({ section: currentSection, name: name, ok: false, message: err.message });
+      }
+    }
+
+    function expectEqual(actual, expected) {
+      var a = JSON.stringify(actual);
+      var e = JSON.stringify(expected);
+      if (a !== e) throw new Error('expected ' + e + ' but got ' + a);
+    }
+
+    // Saturday 24 Oct 2026 and the Monday after it.
+    var saturday = new Date(2026, 9, 24, 10, 0);
+    var nextMonday = new Date(2026, 9, 26, 9, 0);
+
+    test('weeks are labelled with ISO week numbers', function () {
+      expectEqual(L.weekKey(saturday), '2026-W43');
+      expectEqual(L.weekKey(nextMonday), '2026-W44');
+    });
+
+    test('Sunday belongs to the same week as the Monday before it', function () {
+      expectEqual(L.weekKey(new Date(2026, 9, 25)), '2026-W43');
+    });
+
+    test('week numbers work across New Year', function () {
+      expectEqual(L.weekKey(new Date(2026, 0, 1)), '2026-W01');
+      expectEqual(L.weekKey(new Date(2027, 0, 1)), '2026-W53');
+    });
+
+    test('weekStartDay finds the Monday', function () {
+      expectEqual(L.weekStartDay(saturday), '2026-10-19');
+    });
+
+    test('default state has all 11 starter chores, supplies, and cat tasks', function () {
+      var s = L.createDefaultState();
+      expectEqual(s.chores.length, 11);
+      expectEqual(s.chores[0].name, 'Vacuum floors');
+      expectEqual(s.supplies.length > 0, true);
+      expectEqual(s.pets.length > 0, true);
+    });
+
+    test('toggling a chore marks it done, toggling again undoes it', function () {
+      var chore = L.createChore('Dust', true);
+      var week = L.weekKey(saturday);
+      L.toggleChore(chore, week);
+      expectEqual(L.isChoreDone(chore, week), true);
+      L.toggleChore(chore, week);
+      expectEqual(L.isChoreDone(chore, week), false);
+    });
+
+    test('progress counts done chores and rounds the percent', function () {
+      var week = L.weekKey(saturday);
+      var chores = [L.createChore('A'), L.createChore('B'), L.createChore('C')];
+      L.toggleChore(chores[0], week);
+      expectEqual(L.weeklyProgress(chores, week), { done: 1, total: 3, percent: 33 });
+    });
+
+    test('progress with no chores is 0%, not an error', function () {
+      expectEqual(L.weeklyProgress([], '2026-W43'), { done: 0, total: 0, percent: 0 });
+    });
+
+    test('recurring chores reset in a new week, but last week is kept in history', function () {
+      var s = L.createDefaultState();
+      var week = L.weekKey(saturday);
+      L.toggleChore(s.chores[0], week);
+      L.toggleChore(s.chores[1], week);
+      L.recordWeek(s, saturday);
+
+      L.rollover(s, nextMonday);
+
+      expectEqual(s.chores.length, 11);
+      expectEqual(L.weeklyProgress(s.chores, L.weekKey(nextMonday)).done, 0);
+      expectEqual(s.history['2026-W43'].done, 2);
+      expectEqual(s.history['2026-W43'].completed, ['Vacuum floors', 'Mop floors']);
+    });
+
+    test('one-time chores disappear the week after they are finished', function () {
+      var s = L.createDefaultState();
+      s.chores.push(L.createChore('Clean the oven', false));
+      s.chores.push(L.createChore('Fix the shelf', false));
+      L.toggleChore(s.chores[11], L.weekKey(saturday));
+      L.recordWeek(s, saturday);
+
+      L.rollover(s, nextMonday);
+
+      var names = s.chores.map(function (c) { return c.name; });
+      expectEqual(names.indexOf('Clean the oven'), -1);
+      expectEqual(names.indexOf('Fix the shelf') > -1, true);
+      expectEqual(s.history['2026-W43'].completed, ['Clean the oven']);
+    });
+
+    test('changes this week do not change earlier weeks', function () {
+      var s = L.createDefaultState();
+      L.toggleChore(s.chores[0], L.weekKey(saturday));
+      L.recordWeek(s, saturday);
+      L.rollover(s, nextMonday);
+      s.chores.splice(0, 1); // delete a chore in the new week
+      L.recordWeek(s, nextMonday);
+      expectEqual(s.history['2026-W43'].done, 1);
+      expectEqual(s.history['2026-W43'].total, 11);
+    });
+
+    test('pastWeeks lists older weeks newest first, not the current week', function () {
+      var s = L.createDefaultState();
+      L.recordWeek(s, new Date(2026, 9, 10));
+      L.recordWeek(s, saturday);
+      L.recordWeek(s, nextMonday);
+      var weeks = L.pastWeeks(s, nextMonday).map(function (w) { return w.week; });
+      expectEqual(weeks, ['2026-W43', '2026-W41']);
+    });
+
+    test('cat tasks reset each day', function () {
+      var task = L.createPetTask('Feed Cat 1 breakfast');
+      L.togglePetTask(task, L.dayKey(saturday));
+      expectEqual(L.isPetTaskDone(task, L.dayKey(saturday)), true);
+      expectEqual(L.isPetTaskDone(task, L.dayKey(nextMonday)), false);
+    });
+
+    test('supplies toggle on and off', function () {
+      var item = L.createSupply('Sponges');
+      L.toggleSupply(item);
+      expectEqual(item.done, true);
+      L.toggleSupply(item);
+      expectEqual(item.done, false);
+    });
+
+    test('broken or missing saved data starts fresh instead of crashing', function () {
+      expectEqual(L.parseState(null).chores.length, 11);
+      expectEqual(L.parseState('not json {').chores.length, 11);
+      expectEqual(L.parseState('{"chores": 5}').chores.length, 11);
+    });
+
+    test('valid saved data is loaded back', function () {
+      var s = L.createDefaultState();
+      s.chores = [L.createChore('Only chore')];
+      expectEqual(L.parseState(JSON.stringify(s)).chores[0].name, 'Only chore');
+    });
+
+    test('cleanName trims spaces and rejects blanks', function () {
+      expectEqual(L.cleanName('   Wash   windows  '), 'Wash windows');
+      expectEqual(L.cleanName('    '), '');
+    });
+
+    // ---------- Backup & Restore ----------
+    section('Version 1.1 backup basics');
+
+    // Builds a backup file's text from some state, like the Download button does.
+    function backupText(state, when) {
+      return JSON.stringify(L.createBackup(state, when || saturday));
+    }
+
+    // A small, realistic state with a finished chore and one past week.
+    function sampleState() {
+      var s = L.createDefaultState();
+      L.toggleChore(s.chores[0], L.weekKey(saturday));
+      L.toggleSupply(s.supplies[0]);
+      L.togglePetTask(s.pets[0], L.dayKey(saturday));
+      L.recordWeek(s, new Date(2026, 9, 14));
+      L.recordWeek(s, saturday);
+      return s;
+    }
+
+    test('backup file name includes the date', function () {
+      expectEqual(L.backupFileName(saturday), 'household-reset-backup-2026-10-24.json');
+    });
+
+    test('backup contains chores, history, supplies, and cat care', function () {
+      var backup = L.createBackup(sampleState(), saturday);
+      expectEqual(backup.app, 'household-reset');
+      expectEqual(backup.data.chores.length, 11);
+      expectEqual(backup.data.supplies.length, 10);
+      expectEqual(backup.data.pets.length, 7);
+      expectEqual(Object.keys(backup.data.history), ['2026-W42', '2026-W43']);
+    });
+
+    test('a backup restores exactly what was saved', function () {
+      var original = sampleState();
+      var result = L.validateBackup(backupText(original));
+      expectEqual(result.ok, true);
+      expectEqual(result.state, original);
+      expectEqual(result.summary, {
+        exportedAt: saturday.toISOString(), chores: 11, supplies: 10, pets: 7, weeks: 2
+      });
+    });
+
+    test('a backup of empty lists is still valid', function () {
+      var empty = { version: 1, chores: [], supplies: [], pets: [], history: {} };
+      expectEqual(L.validateBackup(backupText(empty)).ok, true);
+    });
+
+    test('empty, non-JSON, and too-large files are rejected', function () {
+      expectEqual(L.validateBackup('').ok, false);
+      expectEqual(L.validateBackup('   ').ok, false);
+      expectEqual(L.validateBackup('hello { not json').ok, false);
+      expectEqual(L.validateBackup('"' + new Array(2000002).join('x') + '"').ok, false);
+    });
+
+    test('JSON from some other app is rejected', function () {
+      expectEqual(L.validateBackup('{"name": "shopping list"}').ok, false);
+      expectEqual(L.validateBackup('[1, 2, 3]').ok, false);
+      expectEqual(L.validateBackup('null').ok, false);
+      // Raw saved data without the backup label is not accepted either.
+      expectEqual(L.validateBackup(JSON.stringify(sampleState())).ok, false);
+    });
+
+    test('a backup from a newer app version is rejected', function () {
+      var file = L.createBackup(sampleState(), saturday);
+      file.backupVersion = 99;
+      var result = L.validateBackup(JSON.stringify(file));
+      expectEqual(result.ok, false);
+      expectEqual(result.error.indexOf('newer') > -1, true);
+    });
+
+    test('damaged lists are rejected with a clear message', function () {
+      function broken(change) {
+        var file = L.createBackup(sampleState(), saturday);
+        change(file.data);
+        return L.validateBackup(JSON.stringify(file));
+      }
+      var cases = [
+        [function (d) { delete d.chores; }, 'chores'],
+        [function (d) { d.chores[0].name = '   '; }, 'chores'],
+        [function (d) { d.chores[0].recurring = 'yes'; }, 'chores'],
+        [function (d) { d.chores[1] = null; }, 'chores'],
+        [function (d) { d.supplies[0].done = 1; }, 'supplies'],
+        [function (d) { delete d.supplies[0].id; }, 'supplies'],
+        [function (d) { d.pets = 'cats'; }, 'cat-care'],
+        [function (d) { d.pets[0].doneDay = 5; }, 'cat-care'],
+        [function (d) { d.history = []; }, 'history'],
+        [function (d) { d.history['2026-W43'].done = 50; }, 'history'],
+        [function (d) { d.history['not a week'] = d.history['2026-W43']; }, 'history']
+      ];
+      cases.forEach(function (c, i) {
+        var result = broken(c[0]);
+        if (result.ok) throw new Error('case ' + i + ' should have been rejected');
+        if (result.error.indexOf(c[1]) === -1) throw new Error('case ' + i + ' gave: ' + result.error);
+      });
+    });
+
+    test('unknown extra fields are dropped and names are tidied on restore', function () {
+      var file = L.createBackup(sampleState(), saturday);
+      file.data.chores[0].sneaky = '<script>';
+      file.data.chores[0].name = '  Vacuum    floors ';
+      var chore = L.validateBackup(JSON.stringify(file)).state.chores[0];
+      expectEqual(Object.keys(chore).sort(), ['doneWeek', 'id', 'name', 'recurring']);
+      expectEqual(chore.name, 'Vacuum floors');
+    });
+
+    test('validating a backup never changes the original data', function () {
+      var original = sampleState();
+      var before = JSON.stringify(original);
+      var result = L.validateBackup(backupText(original));
+      result.state.chores.length = 0;
+      result.state.history['2026-W43'].completed.push('changed');
+      expectEqual(JSON.stringify(original), before);
+    });
+
+    test('recovery: a backup restored in a later week resets chores but keeps history', function () {
+      var restored = L.validateBackup(backupText(sampleState())).state;
+      L.rollover(restored, nextMonday); // what the app does right after restoring
+      expectEqual(L.weeklyProgress(restored.chores, L.weekKey(nextMonday)).done, 0);
+      expectEqual(restored.history['2026-W43'].completed, ['Vacuum floors']);
+      expectEqual(L.pastWeeks(restored, nextMonday).length, 2);
+      expectEqual(L.isPetTaskDone(restored.pets[0], L.dayKey(nextMonday)), false);
+      expectEqual(restored.supplies[0].done, true);
+    });
+
+    test('recovery: restored data survives being saved and loaded again', function () {
+      var restored = L.validateBackup(backupText(sampleState())).state;
+      var reloaded = L.parseState(JSON.stringify(restored));
+      expectEqual(reloaded, restored);
+    });
+
+    // Shows the results on the page, grouped by section.
+    function showResults() {
+      var container = document.getElementById('results');
+      var list = null;
+      var lastSection = null;
+      results.forEach(function (r) {
+        if (r.section !== lastSection) {
+          lastSection = r.section;
+          var inSection = results.filter(function (x) { return x.section === r.section; });
+          var passed = inSection.filter(function (x) { return x.ok; }).length;
+          var heading = document.createElement('h2');
+          heading.textContent = r.section + ' (' + passed + ' of ' + inSection.length + ' passed)';
+          container.appendChild(heading);
+          list = document.createElement('ul');
+          container.appendChild(list);
+        }
+        var li = document.createElement('li');
+        li.className = r.ok ? 'pass' : 'fail';
+        li.textContent = r.name + (r.ok ? '' : ' — ' + r.message);
+        list.appendChild(li);
+      });
+      var failed = results.filter(function (r) { return !r.ok; }).length;
+      var summary = document.getElementById('summary');
+      summary.className = failed ? 'fail' : 'pass';
+      summary.textContent = failed
+        ? failed + ' of ' + results.length + ' automatic tests failed'
+        : 'All ' + results.length + ' automatic tests passed';
+    }
+  </script>
+  <script src="tests-v1-2.js"></script>
+  <script src="tests-v1-3.js"></script>
+  <script>
+    showResults();
+  </script>
+</body>
+</html>
