@@ -757,4 +757,187 @@
     expectEqual(loaded.source, 'saved');
     expectSame(loaded.state, result.state);
   });
+
+  // ======================================================================
+  section('Audit: real-world 1.1 data and older backups');
+
+  // Non-default version 1.1 data: renamed and deleted chores, a one-time
+  // chore, custom supplies, renamed cats, and history across New Year.
+  var V1_CUSTOM = {
+    version: 1,
+    chores: [
+      { id: 'k8f2a1', name: 'Vacuum upstairs & stairs', recurring: true, doneWeek: '2026-W02' },
+      { id: 'k8f2a2', name: 'Mop floors', recurring: true, doneWeek: null },
+      { id: 'k8f2a3', name: "Clean Biscuit's water fountain", recurring: true, doneWeek: '2026-W02' },
+      { id: 'k8f2a4', name: 'Return library books', recurring: false, doneWeek: null }
+    ],
+    supplies: [
+      { id: 'q1', name: 'Unscented cat litter', done: false },
+      { id: 'q2', name: 'Dish soap', done: true },
+      { id: 'q3', name: 'Lavender laundry pods', done: true },
+      { id: 'q4', name: 'Paper towels', done: false }
+    ],
+    pets: [
+      { id: 'r1', name: 'Feed Biscuit breakfast', doneDay: '2026-01-10' },
+      { id: 'r2', name: 'Feed Pepper breakfast', doneDay: null },
+      { id: 'r3', name: "Pepper's eye drops", doneDay: '2026-01-10' }
+    ],
+    history: {
+      '2025-W51': { weekStart: '2025-12-15', done: 6, total: 9, completed: ['Mop floors', 'Vacuum upstairs & stairs'] },
+      '2025-W52': { weekStart: '2025-12-22', done: 2, total: 9, completed: ['Mop floors'] },
+      '2026-W01': { weekStart: '2025-12-29', done: 9, total: 9, completed: ['Mop floors'] },
+      '2026-W02': { weekStart: '2026-01-05', done: 2, total: 4, completed: ['Vacuum upstairs & stairs', "Clean Biscuit's water fountain"] }
+    }
+  };
+
+  // A version 1.2 preview that's already been used: ticks, a skip, a move,
+  // an as-needed chore, a custom chore, and laundry in every stage.
+  function initializedPreview() {
+    var state = freshState();
+    S.toggleDone(state, 'bathroom-clean-toilet', '2026-10-24', '2026-10-26');
+    S.toggleSkip(state, 'kitchen-take-out-kitchen-trash', '2026-10-24');
+    S.moveOccurrence(state, 'bathroom-clean-mirror', '2026-10-24', '2026-10-31', '2026-10-26');
+    S.markAsNeededDone(state, 'bedroom-wipe-nightstands', '2026-10-27');
+    S.addTask(state, 'living-room', 'Water the plants', 'weekly', null, '2026-10-26');
+    var a = W.addLoad(state.laundry, 'regular', null, '2026-10-26');
+    var b = W.addLoad(state.laundry, 'bedding', 'Guest bed', '2026-10-26');
+    var c = W.addLoad(state.laundry, 'towels', null, '2026-10-26');
+    W.addLoad(state.laundry, 'regular', 'Work clothes', '2026-10-26');
+    W.moveLoad(state.laundry, a.id, 'wash', 'x'); W.moveLoad(state.laundry, a.id, 'dry', 'x'); W.moveLoad(state.laundry, a.id, 'finish', '2026-10-26');
+    W.togglePutAway(state.laundry, a.id, '2026-10-27');
+    W.clearPutAway(state.laundry);
+    W.moveLoad(state.laundry, b.id, 'wash', 'x'); W.moveLoad(state.laundry, b.id, 'dry', 'x');
+    W.moveLoad(state.laundry, c.id, 'wash', 'x');
+    return state;
+  }
+
+  function v1BackupText(data) {
+    return JSON.stringify(L1.createBackup(copy(data), new Date(2026, 0, 11, 9, 0)));
+  }
+
+  test('scenario 1: custom 1.1 data upgrades with every chore and week archived', function () {
+    var storage = fakeStorage({ 'householdReset.v1': JSON.stringify(V1_CUSTOM) });
+    var loaded = H.loadState(storage, ACTIVATED);
+    expectEqual(loaded.source, 'migrated');
+    expectSame(loaded.state.legacy.chores, V1_CUSTOM.chores);
+    expectSame(loaded.state.legacy.history, V1_CUSTOM.history);
+    expectSame(loaded.state.supplies, V1_CUSTOM.supplies);
+    expectSame(loaded.state.pets, V1_CUSTOM.pets);
+  });
+
+  test('scenario 1: new room schedule is active and old chores are not copied in', function () {
+    var state = H.loadState(fakeStorage({ 'householdReset.v1': JSON.stringify(V1_CUSTOM) }), ACTIVATED).state;
+    expectEqual(state.tasks.length, 42);
+    var names = state.tasks.map(function (t) { return t.name; });
+    V1_CUSTOM.chores.forEach(function (c) { expectTrue(names.indexOf(c.name) === -1, c.name + ' copied'); });
+    expectEqual(S.occurrencesForWeek(state, null, '2026-10-24', ACTIVATED).length > 0, true);
+    expectSame(state.records, {});
+  });
+
+  test('scenario 1: opening the app five times gives identical data', function () {
+    var storage = fakeStorage({ 'householdReset.v1': JSON.stringify(V1_CUSTOM) });
+    var first = H.loadState(storage, ACTIVATED);
+    H.saveState(storage, first.state);
+    var saved = storage.data['householdReset.v2'];
+    for (var i = 0; i < 5; i++) {
+      var again = H.loadState(storage, S.addDays(ACTIVATED, i * 3));
+      expectEqual(again.source, 'saved');
+      H.saveState(storage, again.state);
+      expectEqual(canon(JSON.parse(storage.data['householdReset.v2'])), canon(JSON.parse(saved)));
+    }
+    expectEqual(storage.data['householdReset.v1'], JSON.stringify(V1_CUSTOM));
+  });
+
+  test('scenario 2: a 1.1 backup keeps existing laundry, ticks, and custom chores', function () {
+    var preview = initializedPreview();
+    var result = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-10-28', preview);
+    expectEqual(result.ok, true);
+    expectEqual(result.summary.mode, 'merge');
+    expectSame(result.state.laundry, preview.laundry);
+    expectSame(result.state.records, preview.records);
+    expectSame(result.state.asNeeded, preview.asNeeded);
+    expectSame(result.state.tasks, preview.tasks);
+    expectEqual(result.state.tasks.length, 43);
+    expectEqual(result.state.activatedOn, preview.activatedOn);
+    expectEqual(result.state.laundry.loads.length, 3);
+    expectEqual(result.state.laundry.archive.length, 1);
+  });
+
+  test('scenario 2: Supplies and Cats come from the backup, unchanged', function () {
+    var result = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-10-28', initializedPreview());
+    expectSame(result.state.supplies, V1_CUSTOM.supplies);
+    expectSame(result.state.pets, V1_CUSTOM.pets);
+  });
+
+  test('scenario 2: old chores and history are added to the archive', function () {
+    var result = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-10-28', initializedPreview());
+    expectSame(result.state.legacy.history, V1_CUSTOM.history);
+    expectSame(result.state.legacy.chores, V1_CUSTOM.chores);
+    expectSame(result.summary.added, { weeks: 4, keptWeeks: 0, chores: 4 });
+  });
+
+  test('scenario 2: restoring the same 1.1 backup twice adds nothing the second time', function () {
+    var once = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-10-28', initializedPreview());
+    var twice = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-10-29', once.state);
+    expectSame(twice.state, once.state);
+    expectSame(twice.summary.added, { weeks: 0, keptWeeks: 4, chores: 0 });
+  });
+
+  test('scenario 2: archive entries already there are never deleted or replaced', function () {
+    // Upgraded from V1_FIXTURE first, then restore a backup with overlapping weeks.
+    var state = H.migrateFromV1(copy(V1_FIXTURE), ACTIVATED).state;
+    var older = copy(V1_FIXTURE);
+    older.history['2026-W43'] = { weekStart: '2026-10-19', done: 0, total: 5, completed: [] }; // stale copy of a week
+    older.history['2026-W40'] = { weekStart: '2026-09-28', done: 5, total: 11, completed: ['Mop floors'] }; // extra week
+    older.chores.push({ id: 'other-device', name: 'Vacuum floors', recurring: true, doneWeek: null }); // same chore, other id
+    var result = H.validateBackup(v1BackupText(older), '2026-10-28', state);
+    expectSame(result.state.legacy.history['2026-W43'], V1_FIXTURE.history['2026-W43']);
+    expectEqual(result.state.legacy.history['2026-W40'].done, 5);
+    expectEqual(Object.keys(result.state.legacy.history).length, 4);
+    expectEqual(result.state.legacy.chores.filter(function (c) { return c.name === 'Vacuum floors'; }).length, 1);
+    expectEqual(result.state.legacy.archivedOn, ACTIVATED);
+  });
+
+  test('scenario 2: checking a backup never changes the data in use', function () {
+    var preview = initializedPreview();
+    var before = canon(preview);
+    var result = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-10-28', preview);
+    result.state.laundry.loads.length = 0;
+    result.state.legacy.chores.push({ id: 'x', name: 'x', recurring: true, doneWeek: null });
+    expectEqual(canon(preview), before);
+  });
+
+  test('scenario 2: the merged data passes every check and reloads the same', function () {
+    var result = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-10-28', initializedPreview());
+    var storage = fakeStorage({});
+    H.saveState(storage, result.state);
+    var loaded = H.loadState(storage, '2026-10-29');
+    expectEqual(loaded.source, 'saved');
+    expectSame(loaded.state, result.state);
+  });
+
+  test('a 1.2 backup still replaces everything, including laundry (as its warning says)', function () {
+    var backupState = usedState();
+    var result = H.validateBackup(JSON.stringify(H.createBackup(backupState, new Date())), '2026-10-28', initializedPreview());
+    expectEqual(result.summary.kind, 'v2');
+    expectSame(result.state, backupState);
+  });
+
+  test('a damaged 1.1 backup is refused and the data in use is untouched', function () {
+    var preview = initializedPreview();
+    var before = canon(preview);
+    var file = L1.createBackup(copy(V1_CUSTOM), new Date());
+    file.data.supplies[1].done = 'sometimes';
+    var result = H.validateBackup(JSON.stringify(file), '2026-10-28', preview);
+    expectEqual(result.ok, false);
+    expectEqual(canon(preview), before);
+  });
+
+  test('damaged 1.2 data with no 1.1 data is reported, with a safety copy', function () {
+    var storage = fakeStorage({ 'householdReset.v2': '{"version":2' });
+    var loaded = H.loadState(storage, ACTIVATED);
+    expectEqual(loaded.source, 'new');
+    expectEqual(loaded.damagedCopy, true);
+    expectEqual(storage.data['householdReset.v2.damaged'], '{"version":2');
+  });
 })();
