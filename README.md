@@ -288,7 +288,7 @@ To move your lists to your phone, make a backup on the iPad, open the file on th
 
 ## Test the app on an iPad
 
-1. **Automatic self-checks:** open `tests.html` (for example `…/household-reset/tests.html` on your published site). The top line should say **"All … automatic tests passed"**, with results grouped by topic. This page uses made-up sample data and never touches your saved lists.
+1. **Automatic self-checks:** open `tests.html` (on the published site: https://gannp301.github.io/household-reset/tests.html). The top line should say **"All … automatic tests passed"**, with results grouped by topic. This page uses made-up sample data and never touches your saved lists.
 2. **Manual checks:** the same page ends with a short list of things only a person can check, like tapping buttons and downloading a backup. Work through them in Safari.
 3. If anything shows ❌, take a screenshot and share it.
 
@@ -346,11 +346,28 @@ You can do all of this in Safari on your iPad at github.com:
 3. In the left menu, tap **Pages**.
 4. Under **Build and deployment → Source**, choose **Deploy from a branch**.
 5. Under **Branch**, choose `main` and the folder `/ (root)`, then tap **Save**.
-6. Wait 1–2 minutes and refresh the page. A link appears at the top, like
-   `https://YOUR-USERNAME.github.io/REPOSITORY-NAME/`.
-7. Add `household-reset/` to the end of that link to open the app:
-   `https://YOUR-USERNAME.github.io/REPOSITORY-NAME/household-reset/`
-8. Optional: in Safari, tap **Share → Add to Home Screen** so it opens like an app.
+6. Wait 1–2 minutes and refresh the page. A link appears at the top:
+   `https://gannp301.github.io/household-reset/`. The app files sit at the root of
+   this repository, so that link opens the app directly.
+7. Optional: in Safari, tap **Share → Add to Home Screen** so it opens like an app.
+
+### Moving from the old address
+
+Household Reset used to live in the `household-reset/` folder of
+`gannp301/claude-code-best-practice`, at
+`https://gannp301.github.io/claude-code-best-practice/household-reset/`. Its full
+history (versions 1.0 to 1.3) was carried over to this repository.
+
+- **Your saved lists come along in the same browser.** Both addresses are on
+  `gannp301.github.io`, and Safari keeps saved data per site, not per page. The new
+  address reads the same saved data (`householdReset.v2`, plus the version 1.1
+  archive in `householdReset.v1`) without changing it.
+- **Use one address at a time.** Both copies save to the same place, so don't keep
+  the old and new pages open side by side and edit in both.
+- **Other devices and browsers** have their own separate data. Nothing syncs
+  between devices. Use **Download backup** and **Restore** to copy lists across.
+- **Back up first:** before switching, open the old address and tap **Download
+  backup**. Backups from either address restore in the other.
 
 ### Publishing an update (like version 1.2)
 
@@ -359,7 +376,7 @@ You can do all of this in Safari on your iPad at github.com:
 3. When you're happy, tap **Merge pull request** → **Confirm merge**.
 4. GitHub Pages republishes from `main` within a few minutes. You can watch progress in the repository's **Actions** tab.
 5. Reload the app in Safari. If it still looks old, wait a minute and reload again.
-6. Open `…/household-reset/tests.html` and check every automatic test passes.
+6. Open https://gannp301.github.io/household-reset/tests.html and check every automatic test passes.
 
 ## Make it your own
 
