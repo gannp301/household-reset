@@ -573,47 +573,211 @@ select:focus-visible,
   color: var(--overdue-ink);
 }
 
-/* ---------- Reminders and upcoming ---------- */
-.reminder-list,
-.upcoming-list,
-.legend-list {
+/* ---------- Heads up ---------- */
+.legend-list,
+.hu-list,
+.hu-items,
+.prep-list {
   list-style: none;
   margin: 10px 0 0;
   padding: 0;
-}
-
-.reminder-list li {
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  border-radius: 12px;
-  background: var(--cream);
-}
-
-.reminder-list .reminder-overdue {
-  background: var(--overdue-bg);
-  color: var(--overdue-ink);
-  font-weight: 600;
-}
-
-.upcoming-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 0 10px 12px;
-  border-left: 5px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-
-.upcoming-when {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--charcoal-soft);
 }
 
 .legend-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.hu-list > li + li {
+  margin-top: 8px;
+}
+
+.hu-group {
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--line);
+  border-radius: 14px;
+  background: var(--cream);
+}
+
+.hu-overdue {
+  border-left-color: var(--overdue-line);
+  background: var(--overdue-bg);
+  color: var(--overdue-ink);
+}
+
+.hu-due {
+  border-left-color: var(--monthly-line);
+}
+
+.hu-soon {
+  border-left-color: var(--quarterly-line);
+}
+
+/* The row you tap: icon, summary, and "Show details" */
+.hu-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.hu-summary::-webkit-details-marker {
+  display: none;
+}
+
+.hu-summary:focus-visible,
+.prep-summary:focus-visible {
+  outline: 3px solid var(--blush-deep);
+  outline-offset: 2px;
+  border-radius: 14px;
+}
+
+.hu-icon {
+  flex: none;
+  font-size: 1.1rem;
+}
+
+.hu-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.hu-title {
+  display: block;
+  font-size: 1rem;
+}
+
+.hu-sub {
+  display: block;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.hu-toggle {
+  flex: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.hu-items {
+  margin: 0;
+  padding: 0 12px 10px;
+}
+
+.hu-item {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  color: var(--charcoal);
+}
+
+.hu-item-name {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.hu-clear {
+  margin: 8px 0 0;
+  font-size: 0.95rem;
+  color: var(--charcoal-soft);
+}
+
+/* ---------- Get ready for next week ---------- */
+.prep-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--tap);
+  cursor: pointer;
+  list-style: none;
+}
+
+.prep-summary::-webkit-details-marker {
+  display: none;
+}
+
+.prep-heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.prep-heading::before {
+  content: "▸ ";
+  color: var(--blush-deep);
+}
+
+.prep-card[open] .prep-heading::before {
+  content: "▾ ";
+}
+
+.prep-count {
+  background: var(--blush);
+  color: var(--charcoal);
+}
+
+.prep-item {
+  padding: 12px 12px 12px 14px;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--f-line);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+.prep-question,
+.prep-answer {
+  margin: 0 0 2px;
+  font-weight: 600;
+}
+
+.prep-status {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  color: var(--charcoal-soft);
+}
+
+.prep-chores {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: 0.9rem;
+}
+
+.prep-chores li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.prep-chore::before {
+  content: "For: ";
+  color: var(--charcoal-soft);
+}
+
+/* Smaller side-by-side buttons that still meet the 44px tap size */
+.btn-compact {
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: 0.95rem;
+  flex: 1 1 auto;
+}
+
+.prep-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.supplies-input {
+  flex-basis: 100% !important;
 }
 
 /* ---------- Room cards ---------- */
@@ -740,7 +904,7 @@ select:focus-visible,
   margin-top: 0;
 }
 
-/* Frequency colours: badge, left edge of each row, and upcoming list */
+/* Frequency colours: badge, left edge of each row, and next-week prep items */
 .freq-weekly { --f-bg: var(--weekly-bg); --f-ink: var(--weekly-ink); --f-line: var(--weekly-line); }
 .freq-biweekly { --f-bg: var(--biweekly-bg); --f-ink: var(--biweekly-ink); --f-line: var(--biweekly-line); }
 .freq-monthly { --f-bg: var(--monthly-bg); --f-ink: var(--monthly-ink); --f-line: var(--monthly-line); }
@@ -754,8 +918,7 @@ select:focus-visible,
 }
 
 .task-row,
-.manage-row,
-.upcoming-item {
+.manage-row {
   border-left-color: var(--f-line);
 }
 
