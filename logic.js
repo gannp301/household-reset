@@ -203,6 +203,140 @@
     return String(text || '').replace(/\s+/g, ' ').trim().slice(0, 80);
   }
 
+  // ---------- Backup & Restore ----------
+
+  var BACKUP_APP = 'household-reset';
+  var BACKUP_VERSION = 1;
+  var MAX_BACKUP_CHARACTERS = 2000000; // about 2 MB, far more than real lists need
+
+  // Wraps all saved data with a label, so a restore can recognise the file.
+  function createBackup(state, now) {
+    return {
+      app: BACKUP_APP,
+      backupVersion: BACKUP_VERSION,
+      exportedAt: now.toISOString(),
+      data: state
+    };
+  }
+
+  // A dated file name, e.g. "household-reset-backup-2026-10-25.json".
+  function backupFileName(now) {
+    return 'household-reset-backup-' + dayKey(now) + '.json';
+  }
+
+  function isPlainObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function isTextOrNull(value) {
+    return value === null || typeof value === 'string';
+  }
+
+  function isCount(value) {
+    return typeof value === 'number' && value >= 0 && Math.floor(value) === value;
+  }
+
+  // Checks every item in a list and copies only the fields the app uses.
+  // Returns null if any item is broken.
+  function checkItems(list, copyExtraFields) {
+    if (!Array.isArray(list)) return null;
+    var copies = [];
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (!isPlainObject(item) || typeof item.id !== 'string' || item.id === '') return null;
+      var name = cleanName(item.name);
+      if (typeof item.name !== 'string' || !name) return null;
+      var extra = copyExtraFields(item);
+      if (!extra) return null;
+      var copy = { id: item.id, name: name };
+      Object.keys(extra).forEach(function (key) { copy[key] = extra[key]; });
+      copies.push(copy);
+    }
+    return copies;
+  }
+
+  function checkHistory(history) {
+    if (!isPlainObject(history)) return null;
+    var copy = {};
+    var weeks = Object.keys(history);
+    for (var i = 0; i < weeks.length; i++) {
+      var week = weeks[i];
+      var entry = history[week];
+      if (!/^\d{4}-W\d{2}$/.test(week) || !isPlainObject(entry)) return null;
+      if (!isCount(entry.done) || !isCount(entry.total) || entry.done > entry.total) return null;
+      if (typeof entry.weekStart !== 'string') return null;
+      var completed = entry.completed === undefined ? [] : entry.completed;
+      if (!Array.isArray(completed) || completed.some(function (n) { return typeof n !== 'string'; })) return null;
+      copy[week] = { weekStart: entry.weekStart, done: entry.done, total: entry.total, completed: completed.slice() };
+    }
+    return copy;
+  }
+
+  // Reads the text of a backup file and checks every part of it.
+  // Returns { ok: true, state, summary } if it's safe to restore,
+  // or { ok: false, error } explaining what's wrong. It never saves anything.
+  function validateBackup(text) {
+    var notBackup = "This file isn't a Household Reset backup.";
+    if (typeof text !== 'string' || text.trim() === '') {
+      return { ok: false, error: 'This file is empty.' };
+    }
+    if (text.length > MAX_BACKUP_CHARACTERS) {
+      return { ok: false, error: 'This file is too large to be a Household Reset backup.' };
+    }
+    var file;
+    try {
+      file = JSON.parse(text);
+    } catch (err) {
+      return { ok: false, error: notBackup + ' It could not be read as JSON.' };
+    }
+    if (!isPlainObject(file) || file.app !== BACKUP_APP || !isPlainObject(file.data)) {
+      return { ok: false, error: notBackup };
+    }
+    if (typeof file.backupVersion !== 'number' || file.backupVersion > BACKUP_VERSION) {
+      return { ok: false, error: 'This backup was made by a newer version of Household Reset.' };
+    }
+
+    var data = file.data;
+    var chores = checkItems(data.chores, function (c) {
+      if (typeof c.recurring !== 'boolean' || !isTextOrNull(c.doneWeek)) return null;
+      return { recurring: c.recurring, doneWeek: c.doneWeek };
+    });
+    if (!chores) return { ok: false, error: 'The chores list in this backup is damaged.' };
+
+    var supplies = checkItems(data.supplies, function (s) {
+      if (typeof s.done !== 'boolean') return null;
+      return { done: s.done };
+    });
+    if (!supplies) return { ok: false, error: 'The supplies list in this backup is damaged.' };
+
+    var pets = checkItems(data.pets, function (p) {
+      if (!isTextOrNull(p.doneDay)) return null;
+      return { doneDay: p.doneDay };
+    });
+    if (!pets) return { ok: false, error: 'The cat-care list in this backup is damaged.' };
+
+    var history = checkHistory(data.history);
+    if (!history) return { ok: false, error: 'The weekly history in this backup is damaged.' };
+
+    return {
+      ok: true,
+      state: {
+        version: STORAGE_VERSION,
+        chores: chores,
+        supplies: supplies,
+        pets: pets,
+        history: history
+      },
+      summary: {
+        exportedAt: typeof file.exportedAt === 'string' ? file.exportedAt : null,
+        chores: chores.length,
+        supplies: supplies.length,
+        pets: pets.length,
+        weeks: Object.keys(history).length
+      }
+    };
+  }
+
   global.HouseholdLogic = {
     STORAGE_VERSION: STORAGE_VERSION,
     DEFAULT_CHORES: DEFAULT_CHORES,
@@ -225,6 +359,9 @@
     rollover: rollover,
     pastWeeks: pastWeeks,
     parseState: parseState,
-    cleanName: cleanName
+    cleanName: cleanName,
+    createBackup: createBackup,
+    backupFileName: backupFileName,
+    validateBackup: validateBackup
   };
 })(typeof window !== 'undefined' ? window : globalThis);
