@@ -227,6 +227,7 @@
     var finish = document.getElementById('finish-week');
     document.getElementById('review-row').hidden = !R.canReview(state, selectedWeek, today());
     finish.textContent = review ? 'Edit week review' : 'Finish Cleaning Week';
+    document.getElementById('undo-review').hidden = !review;
     var reviewStatus = document.getElementById('review-status');
     reviewStatus.hidden = !review && !weekMessage;
     reviewStatus.textContent = weekMessage || (review ? '✓ Reviewed ' + S.formatShort(review.updatedOn) : '');
@@ -666,6 +667,7 @@
       noteWrap.appendChild(button('save-note', note ? 'Save note' : 'Add note', 'btn-quiet', data));
       if (note) noteWrap.appendChild(button('clear-note', 'Clear note', 'btn-small', data));
       actions.appendChild(noteWrap);
+      actions.appendChild(renderSupplyAdder(o.task, 'room:' + occurrenceKey(o)));
       li.appendChild(actions);
     }
     return li;
@@ -1217,25 +1219,113 @@
     }
   }
 
+  // ---------- Add needed supply (checklist and week review) ----------
+
+  // A message shown under one supply box after you tap Add: { box, text, kind }
+  var supplyMessage = null;
+  var SUPPLY_BUTTON = { add: 'Add to Supplies', mark: 'Mark as needed', already: 'Already needed' };
+
+  // `box` names this supply box (one per chore occurrence, per screen).
+  function renderSupplyAdder(task, box) {
+    var wrap = el('div', 'supply-adder');
+    wrap.dataset.box = box;
+    wrap.appendChild(el('p', 'supply-adder-title', 'Add needed supply'));
+    var suggestions = task.supplies || [];
+    if (suggestions.length) {
+      var suggested = el('div', 'supply-suggestions');
+      suggested.appendChild(el('span', 'suggested-label', 'Suggested supplies:'));
+      suggestions.forEach(function (name) {
+        var chip = button('supply-suggest', name, 'btn-small btn-quiet', { box: box, name: name });
+        chip.setAttribute('aria-label', 'Use suggestion: ' + name + ' (fills in the name below)');
+        suggested.appendChild(chip);
+      });
+      wrap.appendChild(suggested);
+    }
+    var row = el('div', 'supply-row');
+    var input = el('input');
+    input.type = 'text';
+    input.className = 'supply-name';
+    input.maxLength = 80;
+    input.placeholder = 'Supply name';
+    input.dataset.box = box;
+    input.setAttribute('aria-label', 'Supply needed for "' + task.name + '"');
+    row.appendChild(input);
+    var add = button('supply-add', SUPPLY_BUTTON.add, 'btn-primary btn-compact', { box: box });
+    add.disabled = true; // typing alone never adds anything
+    row.appendChild(add);
+    wrap.appendChild(row);
+    var message = el('p', 'supply-msg', supplyMessage && supplyMessage.box === box ? supplyMessage.text : '');
+    if (supplyMessage && supplyMessage.box === box) message.className += ' ' + supplyMessage.kind;
+    message.setAttribute('role', 'status');
+    wrap.appendChild(message);
+    return wrap;
+  }
+
+  // Keeps the Add button's wording in step with the name typed.
+  function updateSupplyButton(wrap) {
+    var name = wrap.querySelector('.supply-name').value;
+    var action = R.supplyAction(state, name);
+    var add = wrap.querySelector('[data-action="supply-add"]');
+    add.disabled = !action || action === 'already';
+    add.textContent = SUPPLY_BUTTON[action || 'add'];
+  }
+
+  // Adds (or marks as needed) straight away, and says so. Save first, then switch.
+  function addSupplyFromBox(wrap) {
+    var name = wrap.querySelector('.supply-name').value;
+    var updated = JSON.parse(JSON.stringify(state));
+    var result = P.addOrMarkSupply(updated, name);
+    if (!result || result.action === 'already') return;
+    var storage = getStorage();
+    if (storageMode !== 'ok' || !storage || !H.saveState(storage, updated)) {
+      supplyMessage = { box: wrap.dataset.box, text: 'Couldn\'t save in this browser, so Supplies weren\'t changed.', kind: 'error' };
+      render();
+      return;
+    }
+    state = updated;
+    if (reviewDraft && wrap.closest('#review-view')) reviewDraft.supplyChanges++;
+    supplyMessage = {
+      box: wrap.dataset.box,
+      text: result.action === 'added' ? '✓ Added ' + result.name + ' to Supplies (unticked = needed).'
+        : '✓ Marked ' + result.name + ' as needed on Supplies.',
+      kind: 'success'
+    };
+    render();
+  }
+
+  // Shared click/typing handling for supply boxes anywhere on the page.
+  function onSupplyClick(event) {
+    var btn = event.target.closest('button[data-action^="supply-"]');
+    if (!btn) return false;
+    var wrap = btn.closest('.supply-adder');
+    if (btn.dataset.action === 'supply-suggest') {
+      wrap.querySelector('.supply-name').value = btn.dataset.name; // fills the box; you still tap Add
+      updateSupplyButton(wrap);
+      wrap.querySelector('[data-action="supply-add"]').focus();
+    } else if (btn.dataset.action === 'supply-add') {
+      var box = wrap.dataset.box;
+      addSupplyFromBox(wrap);
+      var again = document.querySelector('.supply-adder[data-box="' + box.replace(/"/g, '\\"') + '"] .supply-msg');
+      if (again) again.focus();
+    }
+    return true;
+  }
+
+  function onSupplyInput(event) {
+    if (!event.target.classList.contains('supply-name')) return false;
+    updateSupplyButton(event.target.closest('.supply-adder'));
+    return true;
+  }
+
   // ---------- Finish Cleaning Week ----------
 
   var reviewDraft = null; // your choices while the review is open (not saved yet)
   var reviewStep = 'choose'; // 'choose' or 'summary'
+  var reviewRoom = null; // room being reviewed, or 'all'
   var reviewError = '';
   var weekMessage = '';
 
-  function reviewItemLabel(o) {
-    return o.task.name + ' (' + roomName(o.task.room) + ')';
-  }
-
-  function supplyStatusText(name) {
-    var action = R.supplyAction(state, name);
-    if (action === 'add') return 'Will be added to Supplies as needed.';
-    if (action === 'mark') return 'Already on Supplies: will be marked as needed.';
-    return 'Pick a suggestion or type a supply name.';
-  }
-
-  function renderReviewItem(o) {
+  function renderReviewItem(o, alreadyDone) {
     var key = S.recordKey(o.task.id, o.week);
     var choice = reviewDraft.items[key];
     var li = el('li', 'review-item freq-' + o.task.frequency);
@@ -1245,6 +1335,8 @@
     var badges = el('span', 'badges');
     badges.appendChild(freqBadge(o.task.frequency));
     if (o.status === 'overdue') badges.appendChild(el('span', 'badge status-overdue', 'Overdue from ' + S.formatShort(o.week)));
+    if (alreadyDone) badges.appendChild(el('span', 'badge status-done', '✓ Done ' + S.formatShort(o.record.completedOn) + ' via this review'));
+    if (reviewRoom === 'all') badges.appendChild(el('span', 'badge', roomName(o.task.room)));
     head.appendChild(badges);
     li.appendChild(head);
 
@@ -1271,39 +1363,36 @@
       note.className = 'review-note';
       note.maxLength = 200;
       note.value = choice.note;
-      note.placeholder = 'Why not finished? (optional note)';
+      note.placeholder = 'Note (optional)';
       note.dataset.key = key;
       note.setAttribute('aria-label', 'Note for "' + o.task.name + '" (optional)');
       li.appendChild(note);
-
       var supply = el('details', 'review-supply');
-      supply.open = !!choice.supply;
+      supply.open = !!(supplyMessage && supplyMessage.box === 'review:' + key);
       supply.appendChild(el('summary', 'review-supply-summary', '+ Add needed supply'));
-      var suggestions = (o.task.supplies || []);
-      if (suggestions.length) {
-        var chips = el('div', 'supply-suggestions');
-        suggestions.forEach(function (name) {
-          var chip = button('review-suggest', name, 'btn-small btn-quiet', { key: key, name: name });
-          chip.setAttribute('aria-label', 'Use suggested supply: ' + name);
-          chips.appendChild(chip);
-        });
-        supply.appendChild(chips);
-      }
-      var supplyInput = el('input');
-      supplyInput.type = 'text';
-      supplyInput.className = 'review-supply-input';
-      supplyInput.maxLength = 80;
-      supplyInput.value = choice.supply;
-      supplyInput.placeholder = 'Supply name';
-      supplyInput.dataset.key = key;
-      supplyInput.setAttribute('aria-label', 'Supply needed for "' + o.task.name + '" (optional)');
-      supply.appendChild(supplyInput);
-      var status = el('p', 'supply-status hint', supplyStatusText(choice.supply));
-      status.setAttribute('aria-live', 'polite');
-      supply.appendChild(status);
+      supply.appendChild(renderSupplyAdder(o.task, 'review:' + key));
       li.appendChild(supply);
     }
     return li;
+  }
+
+  function renderReviewRooms(rooms, data) {
+    var nav = el('div', 'review-rooms');
+    nav.setAttribute('role', 'group');
+    nav.setAttribute('aria-label', 'Choose a room to review');
+    rooms.forEach(function (room) {
+      var done = room.unfinished === 0;
+      var label = (done ? '✓ ' : room.icon + ' ') + room.name + (done ? '' : ' · ' + room.unfinished);
+      var b = button('review-room', label, 'room-pill' + (done ? ' room-pill-done' : ''), { room: room.id });
+      b.setAttribute('aria-pressed', String(reviewRoom === room.id));
+      b.setAttribute('aria-label', room.name + (done ? ', all done' : ', ' + count(room.unfinished, 'unfinished chore', 'unfinished chores')));
+      nav.appendChild(b);
+    });
+    var all = button('review-room', 'All rooms · ' + data.unfinished, 'room-pill', { room: 'all' });
+    all.setAttribute('aria-pressed', String(reviewRoom === 'all'));
+    all.setAttribute('aria-label', 'All rooms, ' + count(data.unfinished, 'unfinished chore', 'unfinished chores'));
+    nav.appendChild(all);
+    return nav;
   }
 
   function renderReview() {
@@ -1332,13 +1421,14 @@
     if (reviewStep === 'summary') {
       var counts = R.previewReview(state, reviewDraft, t);
       var summary = el('ul', 'review-summary');
-      summary.setAttribute('aria-label', 'Review summary');
+      summary.setAttribute('aria-label', 'Review summary, all rooms');
       [
         count(counts.done, 'chore', 'chores') + ' marked Done',
         count(counts.carried, 'chore', 'chores') + ' carried over',
         count(counts.notes, 'note', 'notes') + ' added or updated',
-        count(counts.supplies, 'supply', 'supplies') + ' added or marked as needed'
+        count(counts.supplies, 'supply', 'supplies') + ' added or marked as needed (already saved)'
       ].forEach(function (line) { summary.appendChild(el('li', '', line)); });
+      box.appendChild(el('p', 'review-reviewing', 'Summary for all rooms'));
       box.appendChild(summary);
       box.appendChild(el('p', 'hint', 'Carried-over chores stay open and become overdue after this week, keeping their original due date.'));
       var confirmRow = el('div', 'backup-actions');
@@ -1348,19 +1438,45 @@
       return;
     }
 
-    if (!data.items.length) {
-      box.appendChild(el('p', 'hu-clear', '✓ Everything scheduled in this week is done.'));
+    if (data.unfinished === 0) {
+      box.appendChild(el('p', 'all-done', '✓ All done. Every chore scheduled this week is complete.'));
+      if (data.reviewedDone.length) {
+        var past = el('details', 'reviewed-done');
+        past.appendChild(el('summary', '', 'Marked Done in this review (' + data.reviewedDone.length + ') · you can change these'));
+        var pastList = el('ul', 'review-list');
+        data.reviewedDone.forEach(function (o) { pastList.appendChild(renderReviewItem(o, true)); });
+        past.appendChild(pastList);
+        box.appendChild(past);
+      }
     } else {
-      box.appendChild(el('p', 'hint', 'For each unfinished chore: Carry Over keeps it open (it becomes overdue after this week and keeps its due date). ' +
-        'Done marks it complete today. Chores you already ticked stay completed.'));
-      S.ROOMS.forEach(function (room) {
-        var items = data.items.filter(function (o) { return o.task.room === room.id; });
-        if (!items.length) return;
-        box.appendChild(el('h3', 'review-room', room.icon + ' ' + room.name));
+      var rooms = R.roomSummary(state, reviewDraft.week, t);
+      if (!reviewRoom || (reviewRoom !== 'all' && !rooms.some(function (r) { return r.id === reviewRoom; }))) {
+        var firstOpen = rooms.filter(function (r) { return r.unfinished > 0; })[0];
+        reviewRoom = firstOpen ? firstOpen.id : 'all';
+      }
+      box.appendChild(renderReviewRooms(rooms, data));
+      var inRoom = function (o) { return reviewRoom === 'all' || o.task.room === reviewRoom; };
+      var current = rooms.filter(function (r) { return r.id === reviewRoom; })[0];
+      box.appendChild(el('p', 'review-reviewing', 'Reviewing: ' + (reviewRoom === 'all' ? 'All rooms' : current.icon + ' ' + current.name)));
+      box.appendChild(el('p', 'hint', 'Carry Over keeps a chore open (it becomes overdue after this week and keeps its due date). ' +
+        'Done marks it complete today. Your choices are kept when you switch rooms.'));
+      var unfinished = data.unfinishedItems.filter(inRoom);
+      if (!unfinished.length) {
+        box.appendChild(el('p', 'all-done', '✓ Everything in this room is done.'));
+      } else {
         var ul = el('ul', 'review-list');
-        items.forEach(function (o) { ul.appendChild(renderReviewItem(o)); });
+        unfinished.forEach(function (o) { ul.appendChild(renderReviewItem(o, false)); });
         box.appendChild(ul);
-      });
+      }
+      var reviewed = data.reviewedDone.filter(inRoom);
+      if (reviewed.length) {
+        var prev = el('details', 'reviewed-done');
+        prev.appendChild(el('summary', '', 'Marked Done in this review (' + reviewed.length + ') · you can change these'));
+        var prevList = el('ul', 'review-list');
+        reviewed.forEach(function (o) { prevList.appendChild(renderReviewItem(o, true)); });
+        prev.appendChild(prevList);
+        box.appendChild(prev);
+      }
     }
     var row = el('div', 'backup-actions');
     row.appendChild(button('review-next', 'Review summary', 'btn-primary'));
@@ -1371,8 +1487,10 @@
   function openReview() {
     reviewDraft = R.createDraft(state, selectedWeek, today());
     reviewStep = 'choose';
+    reviewRoom = null;
     reviewError = '';
     weekMessage = '';
+    supplyMessage = null;
     openRoom = null;
     render();
     document.getElementById('review-title').focus();
@@ -1381,6 +1499,7 @@
   function closeReview() {
     reviewDraft = null;
     reviewError = '';
+    supplyMessage = null;
     render();
     document.getElementById('finish-week').focus();
   }
@@ -1399,17 +1518,45 @@
     state = updated;
     reviewDraft = null;
     reviewError = '';
+    supplyMessage = null;
     weekMessage = '✓ Week reviewed: ' + count(counts.done, 'chore', 'chores') + ' done, ' +
       count(counts.carried, 'chore', 'chores') + ' carried over.';
     render();
     document.getElementById('finish-week').focus();
   }
 
+  // Undo Week Review: removes only the review. Chores, dates, notes, and
+  // supplies are untouched. Asks first; save first, then switch.
+  function undoWeekReview() {
+    var week = selectedWeek;
+    if (!state.reviews[week]) return;
+    if (!window.confirm('Undo the review for ' + S.formatRangeShort(week) + '? Your ticked chores, completion dates, notes, and supplies all stay as they are.')) return;
+    var updated = JSON.parse(JSON.stringify(state));
+    R.undoReview(updated, week);
+    var storage = getStorage();
+    if (storageMode !== 'ok' || !storage || !H.saveState(storage, updated)) {
+      weekMessage = 'The review couldn\'t be undone because this browser couldn\'t save. Nothing was changed.';
+      render();
+      return;
+    }
+    state = updated;
+    weekMessage = 'Review undone. Finish Cleaning Week is available again.';
+    render();
+    document.getElementById('finish-week').focus();
+  }
+
   function onReviewClick(event) {
+    if (onSupplyClick(event)) return;
     var btn = event.target.closest('button[data-action]');
     if (!btn) return;
     var d = btn.dataset;
-    if (d.action === 'review-next') {
+    if (d.action === 'review-room') {
+      reviewRoom = d.room;
+      supplyMessage = null;
+      render();
+      var pill = document.querySelector('#review-view [data-action="review-room"][data-room="' + d.room + '"]');
+      if (pill) pill.focus();
+    } else if (d.action === 'review-next') {
       reviewStep = 'summary';
       render();
       var first = document.querySelector('#review-view [data-action="review-confirm"]');
@@ -1421,14 +1568,12 @@
       closeReview();
     } else if (d.action === 'review-confirm') {
       confirmReview();
-    } else if (d.action === 'review-suggest') {
-      reviewDraft.items[d.key].supply = d.name;
-      render();
     }
   }
 
   // Typing and choosing update the draft only; nothing is saved until Confirm.
   function onReviewInput(event) {
+    if (onSupplyInput(event)) return;
     var target = event.target;
     var key = target.dataset.key;
     if (!key || !reviewDraft || !reviewDraft.items[key]) return;
@@ -1439,10 +1584,6 @@
       if (again) again.focus();
     } else if (target.classList.contains('review-note')) {
       reviewDraft.items[key].note = target.value;
-    } else if (target.classList.contains('review-supply-input')) {
-      reviewDraft.items[key].supply = target.value;
-      var status = target.parentNode.querySelector('.supply-status');
-      if (status) status.textContent = supplyStatusText(target.value);
     }
   }
 
@@ -1488,8 +1629,10 @@
   // ---------- Responding to taps in a room ----------
 
   function onRoomClick(event) {
+    if (onSupplyClick(event)) return;
     var btn = event.target.closest('button[data-action]');
     if (!btn || btn.disabled) return;
+    supplyMessage = null;
     var d = btn.dataset;
     var t = today();
     var changed = true;
@@ -1902,10 +2045,12 @@
     roomContent.addEventListener('click', onRoomClick);
     roomContent.addEventListener('submit', onRoomSubmit);
     roomContent.addEventListener('change', onRoomChange);
+    roomContent.addEventListener('input', onSupplyInput);
 
     document.getElementById('prep-list').addEventListener('click', onPrepClick);
 
     document.getElementById('finish-week').addEventListener('click', openReview);
+    document.getElementById('undo-review').addEventListener('click', undoWeekReview);
     var reviewView = document.getElementById('review-view');
     reviewView.addEventListener('click', onReviewClick);
     reviewView.addEventListener('change', onReviewInput);
