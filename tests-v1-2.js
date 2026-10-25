@@ -623,21 +623,23 @@
     expectEqual(loaded.state.supplies.length, 10);
   });
 
-  test('damaged 1.1 data is left untouched and explained', function () {
+  test('damaged 1.1 data is left untouched and saving waits for a decision', function () {
     var storage = fakeStorage({ 'householdReset.v1': '{not valid json' });
     var loaded = H.loadState(storage, ACTIVATED);
     expectEqual(loaded.problem, true);
+    expectEqual(loaded.source, 'damaged');
+    expectEqual(loaded.canSave, false);
     expectTrue(loaded.state.legacy.note.indexOf('untouched') > -1, 'note');
-    H.saveState(storage, loaded.state);
     expectEqual(storage.data['householdReset.v1'], '{not valid json');
   });
 
-  test('damaged 1.2 data is kept as a safety copy before upgrading again', function () {
+  test('damaged 1.2 data is kept as a safety copy before anything else', function () {
     var storage = fakeStorage({ 'householdReset.v1': JSON.stringify(V1_FIXTURE), 'householdReset.v2': '{"version": 2, "tasks": "oops"}' });
     var loaded = H.loadState(storage, ACTIVATED);
     expectEqual(loaded.damagedCopy, true);
     expectEqual(storage.data['householdReset.v2.damaged'], '{"version": 2, "tasks": "oops"}');
-    expectEqual(loaded.source, 'migrated');
+    expectEqual(loaded.source, 'damaged');
+    expectEqual(loaded.needsDecision, true);
   });
 
   test('if storage cannot be read, saving is switched off', function () {
@@ -873,14 +875,14 @@
     var result = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-10-28', initializedPreview());
     expectSame(result.state.legacy.history, V1_CUSTOM.history);
     expectSame(result.state.legacy.chores, V1_CUSTOM.chores);
-    expectSame(result.summary.added, { weeks: 4, keptWeeks: 0, chores: 4 });
+    expectSame(result.summary.added, { weeks: 4, identicalWeeks: 0, conflictWeeks: [], chores: 4, identicalChores: 0, conflictChores: [] });
   });
 
   test('scenario 2: restoring the same 1.1 backup twice adds nothing the second time', function () {
     var once = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-10-28', initializedPreview());
     var twice = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-10-29', once.state);
     expectSame(twice.state, once.state);
-    expectSame(twice.summary.added, { weeks: 0, keptWeeks: 4, chores: 0 });
+    expectSame(twice.summary.added, { weeks: 0, identicalWeeks: 4, conflictWeeks: [], chores: 0, identicalChores: 4, conflictChores: [] });
   });
 
   test('scenario 2: archive entries already there are never deleted or replaced', function () {
@@ -936,8 +938,282 @@
   test('damaged 1.2 data with no 1.1 data is reported, with a safety copy', function () {
     var storage = fakeStorage({ 'householdReset.v2': '{"version":2' });
     var loaded = H.loadState(storage, ACTIVATED);
-    expectEqual(loaded.source, 'new');
+    expectEqual(loaded.source, 'damaged');
+    expectEqual(loaded.canSave, false);
     expectEqual(loaded.damagedCopy, true);
     expectEqual(storage.data['householdReset.v2.damaged'], '{"version":2');
+  });
+
+  // ======================================================================
+  section('Release review fixes');
+
+  // A pretend storage where reading one key fails, or every write fails.
+  function failingStorage(initial, options) {
+    var s = fakeStorage(initial);
+    var get = s.getItem;
+    s.getItem = function (k) {
+      if (options.readFails && options.readFails.indexOf(k) > -1) throw new Error('read failed');
+      return get(k);
+    };
+    if (options.writesFail) s.setItem = function () { throw new Error('quota exceeded'); };
+    return s;
+  }
+
+  // --- 1. Damaged 1.1 data is never replaced without a decision
+  test('#1 damaged 1.1 data: nothing is written, and every reload still asks', function () {
+    var storage = fakeStorage({ 'householdReset.v1': '{"version":1,"chores":"broken' });
+    for (var i = 0; i < 3; i++) {
+      var loaded = H.loadState(storage, ACTIVATED);
+      expectEqual(loaded.source, 'damaged');
+      expectEqual(loaded.needsDecision, true);
+      expectEqual(loaded.canSave, false);
+    }
+    expectEqual(storage.data['householdReset.v2'], undefined);
+    expectEqual(storage.data['householdReset.v1'], '{"version":1,"chores":"broken');
+  });
+
+  test('#1 damaged 1.2 data with good 1.1 data: offers the 1.1 lists but waits to save', function () {
+    var storage = fakeStorage({ 'householdReset.v1': JSON.stringify(V1_FIXTURE), 'householdReset.v2': '{"oops":' });
+    var loaded = H.loadState(storage, ACTIVATED);
+    expectEqual(loaded.needsDecision, true);
+    expectEqual(loaded.problem, false);
+    expectSame(loaded.state.supplies, V1_FIXTURE.supplies); // the stand-in is the upgraded 1.1 data
+    expectEqual(storage.data['householdReset.v2'], '{"oops":'); // not overwritten
+  });
+
+  test('#1 an earlier, different safety copy is never overwritten', function () {
+    var storage = fakeStorage({ 'householdReset.v2': '{"second damage"', 'householdReset.v2.damaged': '{"first damage"' });
+    H.loadState(storage, ACTIVATED);
+    expectEqual(storage.data['householdReset.v2.damaged'], '{"first damage"');
+    expectEqual(storage.data['householdReset.v2.damaged.' + ACTIVATED], '{"second damage"');
+  });
+
+  test('#1 the raw old data can be downloaded exactly as stored', function () {
+    var storage = fakeStorage({ 'householdReset.v1': '{broken', 'someOtherApp': 'x' });
+    expectSame(H.rawSavedData(storage), { 'householdReset.v1': '{broken' });
+  });
+
+  // --- 2. Read failures are not treated as "no data"
+  test('#2 if 1.1 data cannot be read, nothing is created or saved', function () {
+    var storage = failingStorage({ 'householdReset.v1': JSON.stringify(V1_FIXTURE) }, { readFails: ['householdReset.v1'] });
+    var loaded = H.loadState(storage, ACTIVATED);
+    expectEqual(loaded.source, 'unreadable');
+    expectEqual(loaded.canSave, false);
+    expectEqual(storage.data['householdReset.v2'], undefined);
+  });
+
+  test('#2 if 1.2 data cannot be read, saving is switched off', function () {
+    var storage = failingStorage({ 'householdReset.v2': '{}' }, { readFails: ['householdReset.v2'] });
+    var loaded = H.loadState(storage, ACTIVATED);
+    expectEqual(loaded.source, 'unreadable');
+    expectEqual(loaded.canSave, false);
+  });
+
+  test('#2 if a damaged-data safety copy cannot be written, nothing else happens', function () {
+    var storage = failingStorage({ 'householdReset.v2': '{bad', 'householdReset.v1': JSON.stringify(V1_FIXTURE) }, { writesFail: true });
+    var loaded = H.loadState(storage, ACTIVATED);
+    expectEqual(loaded.source, 'unreadable');
+    expectEqual(loaded.canSave, false);
+    expectEqual(storage.data['householdReset.v2'], '{bad');
+  });
+
+  // --- 3. Conflicting archive records are detected and reported
+  test('#3 a week that differs in the backup is reported as a conflict and the archived one is kept', function () {
+    var state = H.migrateFromV1(copy(V1_FIXTURE), ACTIVATED).state;
+    var older = copy(V1_FIXTURE);
+    older.history['2026-W42'].done = 3; // different from the archive
+    older.history['2026-W40'] = { weekStart: '2026-09-28', done: 5, total: 11, completed: [] }; // new
+    var result = H.validateBackup(v1BackupText(older), '2026-10-28', state);
+    expectSame(result.summary.added.conflictWeeks, [{ week: '2026-W42', weekStart: '2026-10-12' }]);
+    expectEqual(result.summary.added.identicalWeeks, 2); // W41 and W43 match exactly
+    expectEqual(result.summary.added.weeks, 1);
+    expectSame(result.state.legacy.history['2026-W42'], V1_FIXTURE.history['2026-W42']);
+  });
+
+  test('#3 a renamed chore with the same id is a conflict; the archived name is kept', function () {
+    var state = H.migrateFromV1(copy(V1_FIXTURE), ACTIVATED).state;
+    var older = copy(V1_FIXTURE);
+    older.chores[0].name = 'Vacuum everywhere';
+    var result = H.validateBackup(v1BackupText(older), '2026-10-28', state);
+    expectSame(result.summary.added.conflictChores, [{ id: 'c1', archivedName: 'Vacuum floors', backupName: 'Vacuum everywhere' }]);
+    expectEqual(result.state.legacy.chores.filter(function (c) { return c.id === 'c1'; })[0].name, 'Vacuum floors');
+    expectEqual(result.state.legacy.chores.length, V1_FIXTURE.chores.length);
+  });
+
+  test('#3 key order alone is not a conflict', function () {
+    var state = H.migrateFromV1(copy(V1_FIXTURE), ACTIVATED).state;
+    var reordered = copy(V1_FIXTURE);
+    var w = reordered.history['2026-W41'];
+    reordered.history['2026-W41'] = { completed: w.completed, total: w.total, done: w.done, weekStart: w.weekStart };
+    var result = H.validateBackup(v1BackupText(reordered), '2026-10-28', state);
+    expectEqual(result.summary.added.conflictWeeks.length, 0);
+    expectEqual(result.summary.added.identicalWeeks, 3);
+  });
+
+  // --- 4. Restores only count as done when saved
+  test('#4 a failed save leaves the saved data exactly as it was', function () {
+    var storage = fakeStorage({});
+    var original = initializedPreview();
+    H.saveState(storage, original);
+    var before = storage.data['householdReset.v2'];
+    var full = failingStorage(storage.data, { writesFail: true });
+    var result = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-10-28', original);
+    expectEqual(result.ok, true);
+    expectEqual(H.saveState(full, result.state), false);
+    expectEqual(full.data['householdReset.v2'], before);
+  });
+
+  // --- 5. Valid migrations stay idempotent and protected
+  test('#5 valid 1.1 data: load, save, and reload ten times gives identical data', function () {
+    var storage = fakeStorage({ 'householdReset.v1': JSON.stringify(V1_CUSTOM) });
+    var first = H.loadState(storage, ACTIVATED);
+    expectEqual(first.source, 'migrated');
+    H.saveState(storage, first.state);
+    var saved = canon(JSON.parse(storage.data['householdReset.v2']));
+    for (var i = 0; i < 10; i++) {
+      var again = H.loadState(storage, ACTIVATED);
+      H.saveState(storage, again.state);
+    }
+    expectEqual(canon(JSON.parse(storage.data['householdReset.v2'])), saved);
+    expectEqual(JSON.parse(storage.data['householdReset.v2']).tasks.length, 42);
+  });
+
+  test('#5 a 1.1 backup changes only Supplies, Cats, and the archive', function () {
+    var preview = initializedPreview();
+    var result = H.validateBackup(v1BackupText(V1_CUSTOM), '2026-10-28', preview);
+    ['version', 'activatedOn', 'activatedWeek', 'tasks', 'records', 'asNeeded', 'laundry'].forEach(function (key) {
+      expectSame(result.state[key], preview[key]);
+    });
+  });
+
+  // --- 7 and 8. Year boundaries and week navigation
+  // Version 1.2 activated just before New Year: Saturday 19 Dec 2026.
+  function newYearState() {
+    return H.createState('2026-12-19', null);
+  }
+
+  function overdueWeeks(state, taskId, today) {
+    return S.overdueOccurrences(state, null, today)
+      .filter(function (o) { return o.task.id === taskId; })
+      .map(function (o) { return o.week; });
+  }
+
+  test('#8 weekly, biweekly, monthly, and quarterly overdue across New Year', function () {
+    var state = newYearState();
+    var today = '2027-01-11'; // week of Sat 9 Jan 2027
+    expectEqual(overdueWeeks(state, 'bathroom-clean-toilet', today), ['2026-12-19', '2026-12-26', '2027-01-02']);
+    expectEqual(overdueWeeks(state, 'bathroom-clean-mirror', today), ['2026-12-19', '2027-01-02']);
+    expectEqual(overdueWeeks(state, 'bathroom-deep-clean-shower-tub', today), ['2027-01-02']);
+    expectEqual(overdueWeeks(state, 'kitchen-clean-oven', today), ['2027-01-02']);
+    expectEqual(overdueWeeks(state, 'kitchen-organize-pantry', today), []);
+  });
+
+  test('#8 skipping and late completion across New Year', function () {
+    var state = newYearState();
+    S.toggleSkip(state, 'bathroom-clean-toilet', '2026-12-26');
+    S.toggleDone(state, 'bathroom-clean-toilet', '2026-12-19', '2027-01-11');
+    expectEqual(overdueWeeks(state, 'bathroom-clean-toilet', '2027-01-11'), ['2027-01-02']);
+    var dec19 = S.weekHistory(state, '2026-12-19', '2027-01-11');
+    var toilet = dec19.done.filter(function (o) { return o.task.id === 'bathroom-clean-toilet'; })[0];
+    expectEqual(toilet.record.completedOn, '2027-01-11');
+    expectEqual(S.weekHistory(state, '2026-12-26', '2027-01-11').skipped.length, 1);
+  });
+
+  test('#8 a chore moved from December into January keeps its December due week', function () {
+    var state = newYearState();
+    expectEqual(S.moveOccurrence(state, 'bathroom-clean-toilet', '2026-12-26', '2027-01-16', '2027-01-11'), true);
+    expectEqual(overdueWeeks(state, 'bathroom-clean-toilet', '2027-01-11').indexOf('2026-12-26'), -1);
+    var jan16 = S.occurrencesForWeek(state, 'bathroom', '2027-01-16', '2027-01-11')
+      .filter(function (o) { return o.task.id === 'bathroom-clean-toilet' && o.week === '2026-12-26'; });
+    expectEqual(jan16.length, 1);
+    expectEqual(S.occurrencesForWeek(state, 'bathroom', '2027-01-16', '2027-01-18').filter(function (o) { return o.week === '2026-12-26' && o.task.id === 'bathroom-clean-toilet'; })[0].status, 'due'); // due during its new week
+    expectEqual(overdueWeeks(state, 'bathroom-clean-toilet', '2027-01-25').indexOf('2026-12-26') > -1, true); // overdue once that week ends
+  });
+
+  test('#8 New Year 2028 starts on a Saturday: monthly and quarterly chores are due that week', function () {
+    expectEqual(S.weekStart('2028-01-01'), '2028-01-01');
+    expectEqual(S.weekStart('2027-12-31'), '2027-12-25');
+    expectEqual(S.isDueInWeek({ frequency: 'monthly' }, '2028-01-01'), true);
+    expectEqual(S.isDueInWeek({ frequency: 'quarterly' }, '2028-01-01'), true);
+    expectEqual(S.isDueInWeek({ frequency: 'biweekly', anchor: '2026-10-24' }, '2028-01-01'), S.weeksBetween('2026-10-24', '2028-01-01') % 2 === 0);
+  });
+
+  test('#7 viewing weeks across New Year never changes completion records', function () {
+    var state = newYearState();
+    S.toggleDone(state, 'bathroom-clean-toilet', '2026-12-19', '2026-12-20');
+    S.toggleSkip(state, 'kitchen-clean-kitchen-sink', '2026-12-26');
+    S.moveOccurrence(state, 'bathroom-clean-mirror', '2027-01-02', '2027-01-16', '2027-01-04');
+    var before = canon(state);
+    for (var w = '2026-11-28'; w <= '2027-02-27'; w = S.addWeeks(w, 1)) {
+      S.overview(state, w, '2027-01-11');
+      S.weekHistory(state, w, '2027-01-11');
+      S.ROOMS.forEach(function (room) { S.occurrencesForWeek(state, room.id, w, '2027-01-11'); });
+    }
+    expectEqual(canon(state), before);
+  });
+
+  // --- 9 and 10. Laundry
+  function finish(laundry, id, day) {
+    W.moveLoad(laundry, id, 'wash', day); W.moveLoad(laundry, id, 'dry', day); W.moveLoad(laundry, id, 'finish', day);
+  }
+
+  test('#9 board counters describe the board; the week total includes cleared loads', function () {
+    var laundry = W.createLaundry();
+    var a = W.addLoad(laundry, 'regular', null, '2026-10-26');
+    finish(laundry, a.id, '2026-10-26');
+    W.togglePutAway(laundry, a.id, '2026-10-26');
+    expectEqual(W.counts(laundry).finished, 1);
+    expectEqual(W.finishedBetween(laundry, '2026-10-24', '2026-10-30'), 1);
+    W.clearPutAway(laundry);
+    expectEqual(W.counts(laundry).finished, 0); // off the board…
+    expectEqual(W.finishedBetween(laundry, '2026-10-24', '2026-10-30'), 1); // …but still counted for the week
+    expectEqual(W.finishedBetween(laundry, '2026-10-31', '2026-11-06'), 0);
+  });
+
+  test('#10 load names are not reused after loads are cleared', function () {
+    var laundry = W.createLaundry();
+    var a = W.addLoad(laundry, 'regular', null, '2026-10-26');
+    finish(laundry, a.id, '2026-10-26');
+    W.togglePutAway(laundry, a.id, '2026-10-26');
+    W.clearPutAway(laundry);
+    expectEqual(W.addLoad(laundry, 'regular', null, '2026-10-27').name, 'Regular clothes 2');
+  });
+
+  test('#10 deleting the load in the washer frees the washer', function () {
+    var laundry = W.createLaundry();
+    var a = W.addLoad(laundry, 'regular', null, 'd');
+    var b = W.addLoad(laundry, 'bedding', null, 'd');
+    W.moveLoad(laundry, a.id, 'wash', 'd');
+    expectEqual(W.canMove(laundry, b, 'wash').ok, false);
+    W.deleteLoad(laundry, a.id);
+    expectEqual(W.canMove(laundry, b, 'wash').ok, true);
+  });
+
+  test('#10 undo, extra drying, and put-away stay consistent', function () {
+    var laundry = W.createLaundry();
+    var a = W.addLoad(laundry, 'towels', null, 'd');
+    finish(laundry, a.id, '2026-10-26');
+    W.togglePutAway(laundry, a.id, '2026-10-27');
+    W.moveLoad(laundry, a.id, 'dryAgain', 'd'); // still damp: back in the dryer
+    expectEqual(a.stage, 'dryer');
+    expectEqual(a.putAway, false);
+    expectEqual(a.putAwayOn, null);
+    expectEqual(a.dryCycles, 2);
+    W.moveLoad(laundry, a.id, 'back', 'd'); // dryer -> washer resets drying
+    expectEqual(a.dryCycles, 0);
+    expectEqual(W.togglePutAway(laundry, a.id, 'd'), false); // can't put away a load in the washer
+  });
+
+  test('#10 the laundry archive survives backup, restore, and reload', function () {
+    var state = freshState();
+    var a = W.addLoad(state.laundry, 'regular', null, '2026-10-26');
+    finish(state.laundry, a.id, '2026-10-26');
+    W.togglePutAway(state.laundry, a.id, '2026-10-26');
+    W.clearPutAway(state.laundry);
+    var result = H.validateBackup(JSON.stringify(H.createBackup(state, new Date())), '2026-10-28');
+    expectSame(result.state.laundry.archive, state.laundry.archive);
+    var storage = fakeStorage({});
+    H.saveState(storage, result.state);
+    expectSame(H.loadState(storage, '2026-10-29').state.laundry.archive, state.laundry.archive);
   });
 })();
