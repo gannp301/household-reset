@@ -36,6 +36,7 @@
       tasks: S.createDefaultTasks(week),
       records: {},
       asNeeded: [],
+      prep: {}, // "Get ready for next week" answers, one per chore occurrence
       laundry: W.createLaundry(),
       supplies: starter.supplies,
       pets: starter.pets,
@@ -221,6 +222,38 @@
       if (!S.isSaturday(t.anchor)) return null;
       copy.anchor = t.anchor;
     }
+    // Optional: supplies the chore needs (added in a later 1.2 update, so
+    // older data simply doesn't have it).
+    if (t.supplies !== undefined) {
+      var supplies = S.cleanSupplies(t.supplies);
+      if (!Array.isArray(t.supplies) || supplies.length !== t.supplies.length) return null;
+      if (supplies.length) copy.supplies = supplies;
+    }
+    return copy;
+  }
+
+  // Optional "Get ready for next week" answers. Missing in older data = {}.
+  function checkPrep(prep) {
+    if (prep === undefined) return {};
+    if (!isPlainObject(prep)) return null;
+    var copy = {};
+    var keys = Object.keys(prep);
+    for (var i = 0; i < keys.length; i++) {
+      var p = prep[keys[i]];
+      var parts = keys[i].split('|');
+      if (parts.length !== 2 || !isId(parts[0]) || !S.isSaturday(parts[1]) || !isPlainObject(p)) return null;
+      if ((p.answer !== 'stocked' && p.answer !== 'added') || !S.isDateText(p.answeredOn)) return null;
+      if (!Array.isArray(p.added) || !p.added.every(isId)) return null;
+      if (!Array.isArray(p.marked) || !p.marked.every(function (m) {
+        return isPlainObject(m) && isId(m.id) && typeof m.wasDone === 'boolean';
+      })) return null;
+      copy[keys[i]] = {
+        answer: p.answer,
+        answeredOn: p.answeredOn,
+        added: p.added.slice(),
+        marked: p.marked.map(function (m) { return { id: m.id, wasDone: m.wasDone }; })
+      };
+    }
     return copy;
   }
 
@@ -314,6 +347,8 @@
     if (!lists) return fail('supplies or cat-care lists');
     var legacy = checkLegacy(data.legacy);
     if (legacy === false) return fail('version 1.1 archive');
+    var prep = checkPrep(data.prep);
+    if (!prep) return fail('next-week prep answers');
 
     return {
       ok: true,
@@ -324,6 +359,7 @@
         tasks: tasks,
         records: records,
         asNeeded: asNeeded,
+        prep: prep,
         laundry: laundry,
         supplies: lists.supplies,
         pets: lists.pets,
